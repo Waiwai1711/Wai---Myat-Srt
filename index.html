@@ -7,24 +7,20 @@
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
     body { background-color: #0b0f17; color: #e6edf3; padding: 18px 12px; display: flex; justify-content: center; min-height: 100vh; }
-    .container { width: 100%; max-width: 480px; display: flex; flex-direction: column; gap: 14px; }
+    .container { width: 100%; max-width: 500px; display: flex; flex-direction: column; gap: 14px; }
     .header { text-align: center; }
     .header h2 { color: #58a6ff; font-size: 1.4rem; font-weight: 700; }
     .header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
-    
     .card { background-color: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
     label { font-size: 0.8rem; font-weight: 600; color: #8b949e; }
     input[type="password"], select, textarea { width: 100%; padding: 11px; border-radius: 8px; border: 1px solid #30363d; background: #0d1117; color: #fff; font-size: 0.85rem; outline: none; }
     textarea { height: 160px; resize: vertical; line-height: 1.5; }
-    
     .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     .field-group { display: flex; flex-direction: column; gap: 5px; }
-
     button { padding: 13px; border-radius: 8px; border: none; font-size: 0.95rem; font-weight: 600; cursor: pointer; transition: 0.2s; }
     .btn-convert { background-color: #238636; color: white; }
     .btn-convert:disabled { background-color: #21262d; color: #484f58; cursor: not-allowed; }
     .btn-download { background-color: #1f6feb; color: white; display: none; }
-    
     .status { font-size: 0.8rem; text-align: center; color: #8b949e; min-height: 20px; line-height: 1.4; word-break: break-all; }
     audio { width: 100%; margin-top: 6px; display: none; }
   </style>
@@ -83,7 +79,7 @@
     </div>
 
     <label>ဖတ်ကြားလိုသော မြန်မာစာသား ရိုက်ထည့်ပါ</label>
-    <textarea id="textInput" placeholder="ဥပမာ- ဒီဇာတ်လမ်းလေးကတော့ မြို့ပေါ်က လူချမ်းသာအမျိုးသမီးတစ်ယောက်ရဲ့ လျှို့ဝှက်ချက်အကြောင်းပဲ ဖြစ်ပါတယ်။"></textarea>
+    <textarea id="textInput" placeholder="ဒီနေရာတွင် ဖတ်ခိုင်းလိုသော မြန်မာစာသားများကို ထည့်သွင်းပါ..."></textarea>
 
     <button class="btn-convert" id="convertBtn">🔊 ရွေးချယ်ထားသော ခံစားချက်ဖြင့် အသံထုတ်မည်</button>
     
@@ -198,7 +194,6 @@ ${rawText}`;
         statusText.textContent = "အသံဖိုင် ဖန်တီးပြီးပါပြီ!";
         downloadBtn.style.display = "block";
       } else {
-        // Fallback TTS Engine (မတော်တဆ အသံ stream မရပါက)
         statusText.textContent = "Neural Engine မှ အသံလှိုင်း ဖန်တီးနေပါသည်...";
         const cleanText = rawText.replace(/\n+/g, ' ').trim();
         const fallbackUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(cleanText.substring(0, 450))}&tl=my&client=tw-ob`;
@@ -225,183 +220,6 @@ ${rawText}`;
     a.href = generatedAudioBlob ? URL.createObjectURL(generatedAudioBlob) : audioPlayer.src;
     a.download = `Wai_Myat_Voice_${Date.now()}.wav`;
     a.click();
-  });
-</script>
-</body>
-</html>
-`https://generativelanguage.googleapis.com/v1beta/models/${chosenModel}:generateContent?key=${apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{
-            parts: [
-              {
-                inlineData: {
-                  mimeType: "audio/wav",
-                  data: audioBase64
-                }
-              },
-              { text: prompt }
-            ]
-          }]
-        })
-      });
-
-      const data = await response.json();
-      if (data.error) throw new Error(data.error.message);
-
-      currentSrtRaw = data.candidates[0].content.parts[0].text.replace(/^```srt\n?|^```\n?|```$/gm, '').trim();
-      parsedSubtitles = parseSRT(currentSrtRaw);
-      scriptText.value = currentSrtRaw;
-
-      resultCard.style.display = "flex";
-      statusText.textContent = "အောင်မြင်စွာ ပြီးဆုံးပါပြီ! ဗီဒီယိုကို Play နှိပ်၍ မြန်မာစာတန်းထိုးဖြင့် ကြည့်ရှုနိုင်ပါပြီ။";
-    } catch (err) {
-      statusText.textContent = "Error: " + err.message;
-    } finally {
-      processBtn.disabled = false;
-    }
-  });
-
-  downloadSrtBtn.addEventListener('click', () => {
-    const blob = new Blob([currentSrtRaw], { type: 'text/plain;charset=utf-8' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = "Wai_Myat_Myanmar_Subtitles.srt";
-    a.click();
-  });
-</script>
-</body>
-</html>
-ent = "AI မှ မြန်မာစကားပြော အသံထုတ်လုပ်နေပါသည်...";
-      const fullText = parsedSubtitles.map(s => s.text).join(". ");
-
-      const ttsResponse = await fetch(`[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$){apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: `Say this naturally in Burmese language:\n${fullText}` }] }],
-          generationConfig: {
-            responseModalities: ["AUDIO"],
-            speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Puck" } } }
-          }
-        })
-      });
-
-      const ttsData = await ttsResponse.json();
-      if (ttsData.candidates && ttsData.candidates[0].content.parts[0].inlineData) {
-        const pcmBase64 = ttsData.candidates[0].content.parts[0].inlineData.data;
-        const binaryString = atob(pcmBase64);
-        const bytes = new Uint8Array(binaryString.length);
-        for (let i = 0; i < binaryString.length; i++) {
-          bytes[i] = binaryString.charCodeAt(i);
-        }
-        generatedAudioBlob = pcmToWav(bytes, 24000);
-        aiAudioPlayer.src = URL.createObjectURL(generatedAudioBlob);
-      }
-
-      resultCard.style.display = "flex";
-      statusText.textContent = "အောင်မြင်စွာ ပြီးဆုံးပါပြီ! အောက်တွင် နားဆင်နိုင်ပါပြီ။";
-    } catch (err) {
-      statusText.textContent = "Error: " + err.message;
-    } finally {
-      processBtn.disabled = false;
-    }
-  });
-
-  playTogetherBtn.addEventListener('click', () => {
-    player.currentTime = 0;
-    player.volume = 0;
-    aiAudioPlayer.currentTime = 0;
-    player.play();
-    aiAudioPlayer.play();
-  });
-
-  downloadVoiceBtn.addEventListener('click', () => {
-    if (!generatedAudioBlob) return alert("အသံဖိုင် မရှိသေးပါ");
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(generatedAudioBlob);
-    a.download = "Wai_Myat_Myanmar_Voice.wav";
-    a.click();
-  });
-
-  downloadSrtBtn.addEventListener('click', () => {
-    const blob = new Blob([currentSrtRaw], { type: 'text/plain;charset=utf-8' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = "Wai_Myat_Subtitle.srt";
-    a.click();
-  });
-
-  exportVideoBtn.addEventListener('click', async () => {
-    if (!parsedSubtitles.length) return alert("အချက်အလက် မပြည့်စုံပါ");
-    
-    exportVideoBtn.disabled = true;
-    statusText.textContent = "ဗီဒီယိုအသစ် Render ပြုလုပ်နေပါသည် (ခဏစောင့်ပါ)...";
-
-    const ctx = renderCanvas.getContext('2d');
-    renderCanvas.width = player.videoWidth || 720;
-    renderCanvas.height = player.videoHeight || 1280;
-
-    const stream = renderCanvas.captureStream(30);
-
-    let audioTracks = [];
-    if (generatedAudioBlob) {
-      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      const dest = audioCtx.createMediaStreamDestination();
-      const audioSource = audioCtx.createMediaElementSource(aiAudioPlayer);
-      audioSource.connect(dest);
-      audioSource.connect(audioCtx.destination);
-      audioTracks = dest.stream.getAudioTracks();
-    }
-
-    const combinedStream = new MediaStream([...stream.getVideoTracks(), ...audioTracks]);
-    const recorder = new MediaRecorder(combinedStream, { mimeType: 'video/webm' });
-    const chunks = [];
-
-    recorder.ondataavailable = e => chunks.push(e.data);
-    recorder.onstop = () => {
-      const blob = new Blob(chunks, { type: 'video/webm' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = `Wai_Myat_Dubbed_Final.webm`;
-      a.click();
-      exportVideoBtn.disabled = false;
-      statusText.textContent = "ဗီဒီယို ဒေါင်းလုဒ်ဆွဲပြီးပါပြီ!";
-    };
-
-    recorder.start();
-    player.currentTime = 0;
-    player.volume = 0;
-    if (generatedAudioBlob) {
-      aiAudioPlayer.currentTime = 0;
-      aiAudioPlayer.play();
-    }
-    player.play();
-
-    function drawFrame() {
-      if (player.paused || player.ended) {
-        recorder.stop();
-        return;
-      }
-      ctx.drawImage(player, 0, 0, renderCanvas.width, renderCanvas.height);
-      
-      const cur = player.currentTime;
-      const sub = parsedSubtitles.find(s => cur >= s.start && cur <= s.end);
-      if (sub) {
-        ctx.font = `bold ${Math.round(renderCanvas.height * 0.035)}px sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.fillStyle = '#ffffff';
-        ctx.strokeStyle = '#000000';
-        ctx.lineWidth = 6;
-        const x = renderCanvas.width / 2;
-        const y = renderCanvas.height * 0.88;
-        ctx.strokeText(sub.text, x, y);
-        ctx.fillText(sub.text, x, y);
-      }
-      requestAnimationFrame(drawFrame);
-    }
-    drawFrame();
   });
 </script>
 </body>
