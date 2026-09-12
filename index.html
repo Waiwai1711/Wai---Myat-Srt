@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="my">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wai & Myat AI Dubbing Studio</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background-color: #0b0f17; color: #e6edf3; padding: 16px 12px; display: flex; justify-content: center; min-height: 100vh; }
+    .container { width: 100%; max-width: 480px; display: flex; flex-direction: column; gap: 14px; }
+    .header { text-align: center; }
+    .header h2 { color: #58a6ff; font-size: 1.4rem; font-weight: 700; }
+    .header p { font-size: 0.8rem; color: #8b949e; margin-top: 4px; }
+    .card { background-color: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+    label { font-size: 0.8rem; font-weight: 600; color: #8b949e; }
+    input[type="password"] { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #30363d; background: #0d1117; color: #fff; font-size: 0.85rem; outline: none; }
+    .file-drop-area { border: 2px dashed #388bfd; border-radius: 10px; padding: 18px 10px; text-align: center; cursor: pointer; background: #0d1117; }
+    .file-name { font-size: 0.8rem; color: #3fb950; margin-top: 6px; word-break: break-all; }
+    button { padding: 12px; border-radius: 8px; border: none; font-size: 0.9rem; font-weight: 600; cursor: pointer; transition: 0.2s; }
+    .btn-primary { background-color: #238636; color: white; }
+    .btn-primary:disabled { background-color: #21262d; color: #484f58; cursor: not-allowed; }
+    .btn-action { background-color: #1f6feb; color: white; margin-top: 6px; }
+    .status { font-size: 0.8rem; text-align: center; color: #8b949e; min-height: 18px; line-height: 1.4; }
+    .preview-box { display: none; flex-direction: column; gap: 10px; }
+    video, canvas { width: 100%; border-radius: 8px; background: black; max-height: 380px; object-fit: contain; }
+    textarea { width: 100%; height: 110px; background: #0d1117; color: #e6edf3; border: 1px solid #30363d; border-radius: 8px; padding: 10px; font-size: 0.8rem; resize: vertical; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <div class="header">
+    <h2>Wai & Myat AI Dubbing Studio</h2>
+    <p>Gemini AI ဖြင့် မြန်မာစကားပြောအသံ + စာတန်းထိုး တိုက်ရိုက်ထုတ်လုပ်စနစ်</p>
+  </div>
+
+  <div class="card">
+    <label>Gemini API Key</label>
+    <input type="password" id="apiKey" placeholder="AIzaSy...">
+
+    <label>ဗီဒီယို ရွေးချယ်ပါ (၁ မိနစ်မှ ၂ မိနစ်ခန့်)</label>
+    <label for="videoInput" class="file-drop-area">
+      <div>📁 ဗီဒီယိုဖိုင် ရွေးရန် နှိပ်ပါ (mp4/webm)</div>
+      <div class="file-name" id="fileName"></div>
+    </label>
+    <input type="file" id="videoInput" accept="video/*" style="display:none">
+
+    <button class="btn-primary" id="processBtn">ဗီဒီယိုမှ မြန်မာအသံနှင့် စာတန်းထိုး ထုတ်မည်</button>
+    <div class="status" id="statusText"></div>
+  </div>
+
+  <div class="card preview-box" id="resultCard">
+    <label>ရလဒ် စစ်ဆေးခြင်း</label>
+    <video id="player" controls playsinline></video>
+    <audio id="aiAudioPlayer" style="display:none;"></audio>
+    <canvas id="renderCanvas" style="display:none;"></canvas>
+    
+    <label>ထုတ်လုပ်ထားသော မြန်မာ SRT</label>
+    <textarea id="scriptText" readonly></textarea>
+    
+    <button class="btn-action" id="playTogetherBtn" style="background:#2ea043;">🔊 မြန်မာအသံနှင့် ဗီဒီယို တွဲဖွင့်ကြည့်မည်</button>
+    <button class="btn-action" id="downloadVoiceBtn" style="background:#0969da;">📥 မြန်မာ AI အသံဖိုင် (.wav) ဒေါင်းလုဒ်ဆွဲမည်</button>
+    <button class="btn-action" id="downloadSrtBtn">📥 Subtitle (.srt) ဒေါင်းလုဒ်ဆွဲမည်</button>
+    <button class="btn-action" id="exportVideoBtn" style="background:#8957e5;">🎬 အသံ + စာတန်းထိုးပါ Video အဖြစ် ဒေါင်းလုဒ်ဆွဲမည်</button>
+  </div>
+</div>
+
+<script>
+  let selectedFile = null;
+  let parsedSubtitles = [];
+  let currentSrtRaw = "";
+  let generatedAudioBlob = null;
+
+  const apiKeyInput = document.getElementById('apiKey');
+  const videoInput = document.getElementById('videoInput');
+  const fileName = document.getElementById('fileName');
+  const processBtn = document.getElementById('processBtn');
+  const statusText = document.getElementById('statusText');
+  const resultCard = document.getElementById('resultCard');
+  const player = document.getElementById('player');
+  const aiAudioPlayer = document.getElementById('aiAudioPlayer');
+  const scriptText = document.getElementById('scriptText');
+  const playTogetherBtn = document.getElementById('playTogetherBtn');
+  const downloadVoiceBtn = document.getElementById('downloadVoiceBtn');
+  const downloadSrtBtn = document.getElementById('downloadSrtBtn');
+  const exportVideoBtn = document.getElementById('exportVideoBtn');
+  const renderCanvas = document.getElementById('renderCanvas');
+
+  if (localStorage.getItem('gemini_api_key')) {
+    apiKeyInput.value = localStorage.getItem('gemini_api_key');
+  }
+
+  videoInput.addEventListener('change', (e) => {
+    selectedFile = e.target.files[0];
+    if (selectedFile) {
+      fileName.textContent = `${selectedFile.name} (${(selectedFile.size / (1024 * 1024)).toFixed(1)} MB)`;
+      player.src = URL.createObjectURL(selectedFile);
+    }
+  });
+
+  const fileToBase64 = (file) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = reject;
+  });
+
+  function parseSRT(data) {
+    const regex = /(\d+)\s+(\d{2}:\d{2}:\d{2}[,\.]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[,\.]\d{3})\s+([\s\S]*?)(?=\n\s*\n|\n*$)/g;
+    const items = [];
+    let match;
+    while ((match = regex.exec(data)) !== null) {
+      items.push({
+        start: timeToSeconds(match[2]),
+        end: timeToSeconds(match[3]),
+        text: match[4].replace(/\n/g, ' ').trim()
+      });
+    }
+    return items;
+  }
+
+  function timeToSeconds(timeStr) {
+    const parts = timeStr.replace(',', '.').split(':');
+    return parseFloat(parts[0]) * 3600 + parseFloat(parts[1]) * 60 + parseFloat(parts[2]);
+  }
+
+  // PCM/L16 Audio ကို Browser ဖွင့်နိုင်သည့် WAV ဖိုင်အဖြစ် ပြောင်းလဲခြင်း
+  function pcmToWav(pcmData, sampleRate = 24000) {
+    const buffer = new ArrayBuffer(44 + pcmData.length);
+    const view = new DataView(buffer);
+    const writeString = (offset, string) => {
+      for (let i = 0; i < string.length; i++) {
+        view.setUint8(offset + i, string.charCodeAt(i));
+      }
+    };
+    writeString(0, 'RIFF');
+    view.setUint32(4, 36 + pcmData.length, true);
+    writeString(8, 'WAVE');
+    writeString(12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true); // PCM
+    view.setUint16(22, 1, true); // Mono
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * 2, true);
+    view.setUint16(32, 2, true);
+    view.setUint16(34, 16, true);
+    writeString(36, 'data');
+    view.setUint32(40, pcmData.length, true);
+    new Uint8Array(buffer, 44).set(pcmData);
+    return new Blob([buffer], { type: 'audio/wav' });
+  }
+
+  processBtn.addEventListener('click', async () => {
+    const apiKey = apiKeyInput.value.trim();
+    if (!apiKey) return alert("Gemini API Key ထည့်ပေးပါ");
+    if (!selectedFile) return alert("ဗီဒီယိုဖိုင် အရင်ရွေးပေးပါ");
+
+    localStorage.setItem('gemini_api_key', apiKey);
+    processBtn.disabled = true;
+    resultCard.style.display = "none";
+    statusText.textContent = "ဗီဒီယိုမှ စာတန်းထိုးများကို စစ်ဆေးနေပါသည်...";
+
+    try {
+      const base64Data = await fileToBase64(selectedFile);
+      
+      // အဆင့် ၁ - SRT နှင့် စကားပြော ဘာသာပြန်ခြင်း
+      const srtPrompt = `Listen to the dialogue in this video clip carefully.
+Translate all dialogue into natural, conversational Myanmar spoken language.
+Format strictly as valid standard SRT format with accurate timestamps.
+Return ONLY raw plain SRT format without markdown tags.`;
+
+      const srtResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { inline_data: { mime_type: selectedFile.type || 'video/mp4', data: base64Data } },
+              { text: srtPrompt }
+            ]
+          }]
+        })
+      });
+
+      const srtData = await srtResponse.json();
+      if (srtData.error) throw new Error(srtData.error.message);
+
+      currentSrtRaw = srtData.candidates[0].content.parts[0].text.replace(/^```srt\n?|^```\n?|```$/gm, '').trim();
+      parsedSubtitles = parseSRT(currentSrtRaw);
+      scriptText.value = currentSrtRaw;
+
+      // အဆင့် ၂ - Gemini Voice Generation ဖြင့် မြန်မာအသံ ထုတ်လုပ်ခြင်း
+      statusText.textContent = "AI မှ သဘာဝကျသော မြန်မာအသံကို ဖန်တီးနေပါသည်...";
+      const fullText = parsedSubtitles.map(s => s.text).join(". ");
+
+      const ttsResponse = await fetch(`[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$){apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: `Read this dialogue naturally in Burmese language:\n${fullText}` }] }],
+          generationConfig: {
+            responseModalities: ["AUDIO"],
+            speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Puck" } } }
+          }
+        })
+      });
+
+      const ttsData = await ttsResponse.json();
+      if (ttsData.candidates && ttsData.candidates[0].content.parts[0].inlineData) {
+        const pcmBase64 = ttsData.candidates[0].content.parts[0].inlineData.data;
+        const binaryString = atob(pcmBase64);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+        generatedAudioBlob = pcmToWav(bytes, 24000);
+        aiAudioPlayer.src = URL.createObjectURL(generatedAudioBlob);
+      }
+
+      resultCard.style.display = "flex";
+      statusText.textContent = "အောင်မြင်စွာ ပြီးဆုံးပါပြီ! အောက်တွင် နားဆင်နိုင်ပါပြီ။";
+    } catch (err) {
+      statusText.textContent = "Error: " + err.message;
+    } finally {
+      processBtn.disabled = false;
+    }
+  });
+
+  // ဗီဒီယို (မူရင်းအသံပိတ်) နှင့် မြန်မာအသံကို တွဲဖွင့်ပြခြင်း
+  playTogetherBtn.addEventListener('click', () => {
+    player.currentTime = 0;
+    player.volume = 0; // မူရင်း တရုတ်အသံကို လုံးဝပိတ်
+    aiAudioPlayer.currentTime = 0;
+    player.play();
+    aiAudioPlayer.play();
+  });
+
+  downloadVoiceBtn.addEventListener('click', () => {
+    if (!generatedAudioBlob) return alert("အသံဖိုင် မရှိသေးပါ");
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(generatedAudioBlob);
+    a.download = "Wai_Myat_Myanmar_Voice.wav";
+    a.click();
+  });
+
+  downloadSrtBtn.addEventListener('click', () => {
+    const blob = new Blob([currentSrtRaw], { type: 'text/plain;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = "Wai_Myat_Subtitle.srt";
+    a.click();
+  });
+
+  // အသံနှင့် စာတန်းထိုးပါပြီးသား Video ဖိုင်အဖြစ် Render ထုတ်ခြင်း
+  exportVideoBtn.addEventListener('click', async () => {
+    if (!parsedSubtitles.length) return alert("အချက်အလက် မပြည့်စုံပါ");
+    
+    exportVideoBtn.disabled = true;
+    statusText.textContent = "ဗီဒီယိုအသစ် Render ပြုလုပ်နေပါသည် (ခဏစောင့်ပါ)...";
+
+    const ctx = renderCanvas.getContext('2d');
+    renderCanvas.width = player.videoWidth || 720;
+    renderCanvas.height = player.videoHeight || 1280;
+
+    const stream = renderCanvas.captureStream(30);
+
+    let audioTracks = [];
+    if (generatedAudioBlob) {
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const dest = audioCtx.createMediaStreamDestination();
+      const audioSource = audioCtx.createMediaElementSource(aiAudioPlayer);
+      audioSource.connect(dest);
+      audioSource.connect(audioCtx.destination);
+      audioTracks = dest.stream.getAudioTracks();
+    }
+
+    const combinedStream = new MediaStream([...stream.getVideoTracks(), ...audioTracks]);
+    const recorder = new MediaRecorder(combinedStream, { mimeType: 'video/webm' });
+    const chunks = [];
+
+    recorder.ondataavailable = e => chunks.push(e.data);
+    recorder.onstop = () => {
+      const blob = new Blob(chunks, { type: 'video/webm' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `Wai_Myat_Dubbed_Final.webm`;
+      a.click();
+      exportVideoBtn.disabled = false;
+      statusText.textContent = "ဗီဒီယို ဒေါင်းလုဒ်ဆွဲပြီးပါပြီ!";
+    };
+
+    recorder.start();
+    player.currentTime = 0;
+    player.volume = 0;
+    if (generatedAudioBlob) {
+      aiAudioPlayer.currentTime = 0;
+      aiAudioPlayer.play();
+    }
+    player.play();
+
+    function drawFrame() {
+      if (player.paused || player.ended) {
+        recorder.stop();
+        return;
+      }
+      ctx.drawImage(player, 0, 0, renderCanvas.width, renderCanvas.height);
+      
+      const cur = player.currentTime;
+      const sub = parsedSubtitles.find(s => cur >= s.start && cur <= s.end);
+      if (sub) {
+        ctx.font = `bold ${Math.round(renderCanvas.height * 0.035)}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#ffffff';
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 6;
+        const x = renderCanvas.width / 2;
+        const y = renderCanvas.height * 0.88;
+        ctx.strokeText(sub.text, x, y);
+        ctx.fillText(sub.text, x, y);
+      }
+      requestAnimationFrame(drawFrame);
+    }
+    drawFrame();
+  });
+</script>
+</body>
+</html>
