@@ -337,18 +337,13 @@ Return ONLY raw SRT text without markdown fences.`;
     a.click();
   });
 
-  // စာတန်းထိုးပါ ဗီဒီယို Render ထုတ်လုပ် သိမ်းဆည်းခြင်း
+  // စာတန်းထိုးပါပြီးသား Video ဖိုင်ကို ဒေါင်းလုဒ်ဆွဲသည့် အသစ်ပြင်ဆင်ထားသော စနစ်
   exportVideoBtn.addEventListener('click', async () => {
-    // အကယ်၍ parsedSubtitles ထဲ မရောက်သေးပါက Textarea ထဲက စာကို တိုက်ရိုက်ဖတ်ယူခြင်း
-    if (!parsedSubtitles.length) {
-      parsedSubtitles = parseSRT(srtEditor.value);
-    }
-    if (!parsedSubtitles.length) {
-      return alert("စာတန်းထိုး အရင်ထုတ်ယူပါ");
-    }
+    parsedSubtitles = parseSRT(srtEditor.value);
+    if (!parsedSubtitles.length) return alert("စာတန်းထိုး အရင်ထုတ်ယူပါ");
 
     exportVideoBtn.disabled = true;
-    statusText.textContent = "စာတန်းထိုးထားသော Video ကို Export ထုတ်နေပါသည် (ခဏစောင့်ပါ)...";
+    statusText.textContent = "Render စတင်နေပါသည်... စက္ကန့်ပိုင်းအတွင်း ဒေါင်းလုဒ်ကျပါမည်...";
 
     const canvas = document.createElement('canvas');
     canvas.width = player.videoWidth || 720;
@@ -357,72 +352,112 @@ Return ONLY raw SRT text without markdown fences.`;
 
     const stream = canvas.captureStream(30);
 
-    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const source = audioCtx.createMediaElementSource(player);
-    const dest = audioCtx.createMediaStreamDestination();
-    source.connect(dest);
-    source.connect(audioCtx.destination);
-    
-    if (dest.stream.getAudioTracks().length > 0) {
-      stream.addTrack(dest.stream.getAudioTracks()[0]);
+    // Audio capture
+    try {
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const source = audioCtx.createMediaElementSource(player);
+      const dest = audioCtx.createMediaStreamDestination();
+      source.connect(dest);
+      source.connect(audioCtx.destination);
+      if (dest.stream.getAudioTracks().length > 0) {
+        stream.addTrack(dest.stream.getAudioTracks()[0]);
+      }
+    } catch (e) {
+      console.warn("Audio pass", e);
     }
 
-    let mimeType = 'video/webm;codecs=vp8,opus';
-    if (!MediaRecorder.isTypeSupported(mimeType)) {
-      mimeType = 'video/webm';
+    let mimeType = 'video/webm';
+    if (MediaRecorder.isTypeSupported('video/webm;codecs=vp8')) {
+      mimeType = 'video/webm;codecs=vp8';
+    } else if (MediaRecorder.isTypeSupported('video/mp4')) {
+      mimeType = 'video/mp4';
     }
+
     const recorder = new MediaRecorder(stream, { mimeType });
-    const recordedChunks = [];
+    const chunks = [];
 
-    recorder.ondataavailable = (e) => {
-      if (e.data.size > 0) recordedChunks.push(e.data);
+    recorder.ondataavailable = e => {
+      if (e.data && e.data.size > 0) chunks.push(e.data);
+    };
+
+    let isFinished = false;
+    const finishRecording = () => {
+      if (isFinished) return;
+      isFinished = true;
+      if (recorder.state !== 'inactive') {
+        recorder.stop();
+      }
     };
 
     recorder.onstop = () => {
-      const blob = new Blob(recordedChunks, { type: mimeType });
+      const blob = new Blob(chunks, { type: mimeType });
+      const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = `Subtitled_${selectedFile ? selectedFile.name : 'video.webm'}`;
+      a.href = url;
+      a.download = `Subtitled_${Date.now()}.webm`;
+      document.body.appendChild(a);
       a.click();
+      setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, 2000);
       statusText.textContent = "ဗီဒီယို ဒေါင်းလုဒ်ဆွဲယူပြီးပါပြီ!";
       exportVideoBtn.disabled = false;
       player.pause();
     };
 
-    recorder.start();
+    recorder.start(500);
     player.currentTime = 0;
-    await player.play();
+    
+    // ဖုန်း browser တွေ autoplay ကန့်သတ်ချက် မဖြစ်စေရန်
+    try {
+      await player.play();
+    } catch (err) {
+      player.muted = true;
+      await player.play();
+    }
 
-    function drawFrame() {
-      if (player.paused || player.ended) {
-        if (player.ended) recorder.stop();
+    // ဗီဒီယို ကြာချိန်ပြည့်သွားပါက အလိုအလျောက် ရပ်ပြီး download ပေးမည့် Safety Timeout
+    const maxDuration = (player.duration || 60) * 1000 + 1500;
+    const safetyTimer = setTimeout(() => {
+      finishRecording();
+    }, maxDuration);
+
+    function renderLoop() {
+      if (isFinished || player.paused || player.ended) {
+        if (player.ended || isFinished) {
+          clearTimeout(safetyTimer);
+          finishRecording();
+        }
         return;
       }
 
       ctx.drawImage(player, 0, 0, canvas.width, canvas.height);
 
       const cur = player.currentTime;
-      const active = parsedSubtitles.find(s => cur >= s.start && cur <= s.end);
+      const progress = Math.round((cur / (player.duration || 1)) * 100) || 0;
+      statusText.textContent = `ဗီဒီယို Render ထုတ်နေပါသည် (${progress}%)...`;
 
+      const active = parsedSubtitles.find(s => cur >= s.start && cur <= s.end);
       if (active) {
-        const fontSize = Math.floor(canvas.height * 0.042);
+        const fontSize = Math.floor(canvas.height * 0.040);
         ctx.font = `bold ${fontSize}px sans-serif`;
         ctx.textAlign = "center";
         ctx.fillStyle = "#ffff00";
         ctx.strokeStyle = "#000000";
-        ctx.lineWidth = Math.max(3, Math.floor(fontSize * 0.15));
+        ctx.lineWidth = Math.max(3, Math.floor(fontSize * 0.16));
 
         const x = canvas.width / 2;
-        const y = canvas.height - (canvas.height * 0.08);
+        const y = canvas.height - (canvas.height * 0.10);
 
         ctx.strokeText(active.text, x, y);
         ctx.fillText(active.text, x, y);
       }
 
-      requestAnimationFrame(drawFrame);
+      requestAnimationFrame(renderLoop);
     }
 
-    drawFrame();
+    renderLoop();
   });
 </script>
 </body>
