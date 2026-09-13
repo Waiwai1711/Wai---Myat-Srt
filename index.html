@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Wai & Myat - Video SRT Studio</title>
-  <!-- WebM ကြာချိန်နှင့် ရစ်ကြည့်နိုင်အောင် ပြုပြင်ပေးသည့် Library -->
   <script src="https://cdn.jsdelivr.net/npm/fix-webm-duration@1.0.5/fix-webm-duration.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: "Pyidaungsu", "Myanmar Text", -apple-system, sans-serif; }
@@ -25,13 +24,14 @@
     .btn-primary { background-color: #238636; color: white; }
     .btn-primary:disabled { background-color: #21262d; color: #484f58; cursor: not-allowed; }
     .btn-action { background-color: #1f6feb; color: white; margin-top: 4px; }
-    .btn-update { background-color: #d29922; color: #000; font-weight: 700; }
     .btn-export { background-color: #8957e5; color: white; font-weight: bold; margin-top: 4px; }
+    .btn-success-dl { background-color: #238636; color: white; font-weight: bold; margin-top: 4px; display: none; text-align: center; text-decoration: none; padding: 12px; border-radius: 8px; }
     
     .status { font-size: 0.82rem; text-align: center; color: #8b949e; min-height: 20px; line-height: 1.4; word-break: break-all; }
+    .sub-badge { font-size: 0.8rem; color: #3fb950; font-weight: bold; text-align: center; background: rgba(63, 185, 80, 0.15); padding: 6px; border-radius: 6px; border: 1px solid #238636; }
     .preview-box { display: none; flex-direction: column; gap: 10px; }
     
-    /* Video Box & Fullscreen Styling */
+    /* Video Container & Subtitle Styling */
     .video-container { position: relative; width: 100%; background: #000; border-radius: 8px; overflow: hidden; display: flex; justify-content: center; align-items: center; }
     .video-container:fullscreen, .video-container:-webkit-full-screen { width: 100vw; height: 100vh; border-radius: 0; }
     
@@ -40,33 +40,36 @@
     
     .subtitle-overlay { 
       position: absolute; 
-      bottom: 45px; 
-      left: 10px; 
-      right: 10px; 
+      bottom: 58px; 
+      left: 6%; 
+      right: 6%; 
       text-align: center; 
       color: #FFE500; 
-      font-size: 1.05rem; 
+      font-size: 1.15rem; 
       font-weight: 700; 
       text-shadow: 2px 2px 3px #000, -2px -2px 3px #000, 2px -2px 3px #000, -2px 2px 3px #000; 
       pointer-events: none;
-      line-height: 1.5;
+      line-height: 1.45;
       word-break: break-word;
-      z-index: 10;
-      padding: 4px 10px;
+      z-index: 99;
+      background: rgba(0, 0, 0, 0.65);
+      padding: 6px 12px;
+      border-radius: 6px;
+      display: none;
     }
-    .video-container:fullscreen .subtitle-overlay { font-size: 1.4rem; bottom: 65px; }
+    .video-container:fullscreen .subtitle-overlay { font-size: 1.45rem; bottom: 75px; }
 
     .fs-toggle-btn {
       position: absolute;
       top: 10px;
       right: 10px;
-      background: rgba(0,0,0,0.65);
+      background: rgba(0,0,0,0.7);
       color: #fff;
       border: 1px solid #666;
       padding: 6px 12px;
       border-radius: 6px;
       font-size: 0.78rem;
-      z-index: 20;
+      z-index: 100;
     }
     
     textarea { height: 170px; resize: vertical; line-height: 1.4; font-family: monospace; }
@@ -77,7 +80,7 @@
 <div class="container">
   <div class="header">
     <h2>Wai & Myat Video Subtitle Studio</h2>
-    <p>Gemini & Groq (Duration Fixed & Auto-Wrap Video Export)</p>
+    <p>Gemini & Groq (Auto Fallback & Accurate Time Parser)</p>
   </div>
 
   <div class="card">
@@ -112,12 +115,13 @@
       <div class="subtitle-overlay" id="subOverlay"></div>
       <button class="fs-toggle-btn" id="customFsBtn">⛶ စာတန်းပါ Fullscreen</button>
     </div>
+    <div class="sub-badge" id="subCountBadge">စာတန်းထိုး ရှာဖွေနေပါသည်...</div>
     
     <label>✏️ မြန်မာ SRT စာသားများကို ပြင်ဆင်နိုင်ပါသည် (Edit Box)</label>
     <textarea id="srtEditor"></textarea>
     
-    <button class="btn-update" id="syncBtn">🔄 ပြင်ဆင်ချက်များကို Video ပေါ် အသစ်ပြန်တင်မည်</button>
     <button class="btn-export" id="exportVideoBtn">🎥 စာတန်းထိုးပြီးသား Video အဖြစ် ဒေါင်းလုဒ်ဆွဲမည်</button>
+    <a id="directDownloadLink" class="btn-success-dl" download="Subtitled_Video.mp4">✅ ဒေါင်းလုဒ်ဖိုင် အဆင်သင့်ဖြစ်ပါပြီ (နှိပ်ပြီး သိမ်းပါ)</a>
     <button class="btn-action" id="downloadSrtBtn">📥 ပြင်ဆင်ပြီး SRT ဖိုင် ဒေါင်းလုဒ်ဆွဲမည်</button>
   </div>
 </div>
@@ -137,16 +141,16 @@
   const player = document.getElementById('player');
   const subOverlay = document.getElementById('subOverlay');
   const srtEditor = document.getElementById('srtEditor');
-  const syncBtn = document.getElementById('syncBtn');
+  const subCountBadge = document.getElementById('subCountBadge');
   const downloadSrtBtn = document.getElementById('downloadSrtBtn');
   const exportVideoBtn = document.getElementById('exportVideoBtn');
   const customFsBtn = document.getElementById('customFsBtn');
   const videoContainer = document.getElementById('videoContainer');
+  const directDownloadLink = document.getElementById('directDownloadLink');
 
   if (localStorage.getItem('gemini_api_key')) geminiKey.value = localStorage.getItem('gemini_api_key');
   if (localStorage.getItem('groq_api_key')) groqKey.value = localStorage.getItem('groq_api_key');
 
-  // စာတန်းပါ Fullscreen ကြည့်ရှုခြင်း
   customFsBtn.addEventListener('click', () => {
     if (!document.fullscreenElement && !document.webkitFullscreenElement) {
       if (videoContainer.requestFullscreen) videoContainer.requestFullscreen();
@@ -217,40 +221,104 @@
     return btoa(binary);
   }
 
-  function parseSRT(data) {
-    if (!data) return [];
-    const regex = /(\d+)\s+(\d{2}:\d{2}:\d{2}[,\.]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[,\.]\d{3})\s+([\s\S]*?)(?=\n\s*\n|\n*$)/g;
-    const items = [];
-    let match;
-    while ((match = regex.exec(data)) !== null) {
-      items.push({
-        start: timeToSeconds(match[2]),
-        end: timeToSeconds(match[3]),
-        text: match[4].replace(/\n/g, ' ').trim()
-      });
+  // 00:06:260 (ကော်လံ ၃ ခု) ရော၊ 00:00:06,260 ကိုပါ အတိအကျ နားလည်သော Universal Time Converter
+  function parseTimestampToSeconds(t) {
+    if (!t) return 0;
+    t = t.trim().replace(',', '.');
+    const parts = t.split(':');
+    
+    if (parts.length === 3) {
+      // 00:06:260 (MM:SS:mmm)
+      if (parts[2].length >= 3 && !parts[2].includes('.')) {
+        return (parseFloat(parts[0]) || 0) * 60 + (parseFloat(parts[1]) || 0) + (parseFloat(parts[2]) || 0) / 1000;
+      }
+      // Standard HH:MM:SS.mmm
+      return (parseFloat(parts[0]) || 0) * 3600 + (parseFloat(parts[1]) || 0) * 60 + (parseFloat(parts[2]) || 0);
+    } else if (parts.length === 2) {
+      if (parts[1].length >= 3 && !parts[1].includes('.')) {
+        return (parseFloat(parts[0]) || 0) + (parseFloat(parts[1]) || 0) / 1000;
+      }
+      return (parseFloat(parts[0]) || 0) * 60 + (parseFloat(parts[1]) || 0);
+    } else if (parts.length === 4) {
+      // HH:MM:SS:mmm
+      return (parseFloat(parts[0]) || 0) * 3600 + (parseFloat(parts[1]) || 0) * 60 + (parseFloat(parts[2]) || 0) + (parseFloat(parts[3]) || 0) / 1000;
     }
-    return items;
+    return parseFloat(t) || 0;
   }
 
-  function timeToSeconds(timeStr) {
-    const parts = timeStr.replace(',', '.').split(':');
-    return parseFloat(parts[0]) * 3600 + parseFloat(parts[1]) * 60 + parseFloat(parts[2]);
+  // မည်သည့် SRT စာသားပုံစံမဆို လုံးဝအမှားအယွင်းမရှိ ဖတ်ယူနိုင်သော Bulletproof Parser
+  function parseSRT(text) {
+    if (!text) return [];
+    const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+    const subs = [];
+    let currentSub = null;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) {
+        if (currentSub && currentSub.text) {
+          subs.push(currentSub);
+          currentSub = null;
+        }
+        continue;
+      }
+
+      if (line.includes('-->')) {
+        const parts = line.split('-->');
+        if (currentSub && currentSub.text) {
+          subs.push(currentSub);
+        }
+        currentSub = {
+          start: parseTimestampToSeconds(parts[0]),
+          end: parseTimestampToSeconds(parts[1]),
+          text: ''
+        };
+      } else if (currentSub) {
+        if (!/^\d+$/.test(line)) { // အညွှန်းနံပါတ်များကို ချန်လှပ်ခြင်း
+          currentSub.text = currentSub.text ? (currentSub.text + '\n' + line) : line;
+        }
+      }
+    }
+    if (currentSub && currentSub.text) {
+      subs.push(currentSub);
+    }
+    return subs;
   }
 
-  player.addEventListener('timeupdate', () => {
+  function updateSubtitlesFromEditor() {
+    parsedSubtitles = parseSRT(srtEditor.value);
+    subCountBadge.textContent = `✅ စာတန်းထိုး (${parsedSubtitles.length}) ခု အဆင်သင့်ရှိပါသည်`;
+  }
+
+  // စာသားပြင်သည်နှင့် အလိုအလျောက် Update ပြုလုပ်ခြင်း
+  srtEditor.addEventListener('input', updateSubtitlesFromEditor);
+
+  // Video ဖွင့်နေချိန်၊ ရစ်နေချိန် စာတန်း အချိန်ကိုက် တိုက်ရိုက်ပြသခြင်း
+  function updateSubtitleOverlay() {
+    if (!parsedSubtitles.length) parsedSubtitles = parseSRT(srtEditor.value);
     const cur = player.currentTime;
     const active = parsedSubtitles.find(s => cur >= s.start && cur <= s.end);
-    subOverlay.textContent = active ? active.text : "";
-  });
+    if (active && active.text) {
+      subOverlay.textContent = active.text;
+      subOverlay.style.display = "block";
+    } else {
+      subOverlay.textContent = "";
+      subOverlay.style.display = "none";
+    }
+  }
+
+  player.addEventListener('timeupdate', updateSubtitleOverlay);
+  player.addEventListener('seeked', updateSubtitleOverlay);
+  player.addEventListener('play', updateSubtitleOverlay);
 
   async function runGemini(audioData, key) {
     const base64 = bytesToBase64(audioData.bytes);
     const prompt = `Listen carefully. Translate all dialogue into natural spoken Burmese (မြန်မာစကားပြော).
-Format strictly as standard SRT:
+Format strictly as standard valid SRT format with accurate timestamps:
 1
 00:00:01,000 --> 00:00:03,500
 [မြန်မာစကားပြော]
-Return ONLY raw SRT text without markdown fences.`;
+Return plain raw SRT text only without markdown tags.`;
 
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
       method: 'POST',
@@ -295,7 +363,7 @@ Return ONLY raw SRT text without markdown fences.`;
         model: "llama-3.3-70b-versatile",
         messages: [{
           role: "user",
-          content: `Translate every line in this SRT to natural spoken Burmese (မြန်မာစကားပြော). Keep exact timestamps and index intact. Return ONLY raw SRT:\n\n${originalSrt}`
+          content: `Translate every line in this SRT to natural spoken Burmese (မြန်မာစကားပြော). Keep the exact timestamps and index numbers intact. Output raw SRT only:\n\n${originalSrt}`
         }]
       })
     });
@@ -319,6 +387,7 @@ Return ONLY raw SRT text without markdown fences.`;
 
     processBtn.disabled = true;
     resultCard.style.display = "none";
+    directDownloadLink.style.display = "none";
     statusText.textContent = "အသံဖိုင်ကို စစ်ဆေးချုံ့ယူနေပါသည်...";
 
     try {
@@ -337,7 +406,7 @@ Return ONLY raw SRT text without markdown fences.`;
           rawSrt = await runGemini(audioData, gKey);
         } catch (geminiErr) {
           if (grKey) {
-            statusText.textContent = "Gemini High Demand ဖြစ်နေသဖြင့် Groq သို့ အလိုအလျောက် ပြောင်းသုံးနေပါသည်...";
+            statusText.textContent = "Gemini High Demand ဖြစ်သဖြင့် Groq သို့ အလိုအလျောက် ပြောင်းသုံးနေပါသည်...";
             rawSrt = await runGroq(audioData, grKey);
           } else {
             throw geminiErr;
@@ -347,20 +416,15 @@ Return ONLY raw SRT text without markdown fences.`;
 
       rawSrt = rawSrt.replace(/^```srt\n?|^```\n?|```$/gm, '').trim();
       srtEditor.value = rawSrt;
-      parsedSubtitles = parseSRT(rawSrt);
+      updateSubtitlesFromEditor();
 
       resultCard.style.display = "flex";
-      statusText.textContent = "အောင်မြင်စွာ ပြီးဆုံးပါပြီ! Video ဖြင့် တိုက်စစ်နိုင်ပါပြီ။";
+      statusText.textContent = "အောင်မြင်စွာ ပြီးဆုံးပါပြီ! Video ဖွင့်၍ စာတန်းထိုး စစ်ဆေးနိုင်ပါပြီ။";
     } catch (err) {
       statusText.textContent = "Error: " + err.message;
     } finally {
       processBtn.disabled = false;
     }
-  });
-
-  syncBtn.addEventListener('click', () => {
-    parsedSubtitles = parseSRT(srtEditor.value);
-    alert("ပြင်ဆင်ချက်များကို Video ပေါ် ချိတ်ဆက်လိုက်ပါပြီ!");
   });
 
   downloadSrtBtn.addEventListener('click', () => {
@@ -371,31 +435,36 @@ Return ONLY raw SRT text without markdown fences.`;
     a.click();
   });
 
-  // မြန်မာစာလုံးများ ဘေးမပြတ်အောင် character အလိုက် ခွဲပေးသည့် စနစ်
   function wrapBurmeseText(ctx, text, maxWidth) {
     const lines = [];
-    let currentLine = '';
-    for (let i = 0; i < text.length; i++) {
-      const char = text[i];
-      const testLine = currentLine + char;
-      if (ctx.measureText(testLine).width > maxWidth && currentLine.length > 0) {
-        lines.push(currentLine);
-        currentLine = char;
-      } else {
-        currentLine = testLine;
+    const rawLines = text.split('\n');
+    for (const rLine of rawLines) {
+      let currentLine = '';
+      for (let i = 0; i < rLine.length; i++) {
+        const char = rLine[i];
+        const testLine = currentLine + char;
+        if (ctx.measureText(testLine).width > maxWidth && currentLine.length > 0) {
+          lines.push(currentLine);
+          currentLine = char;
+        } else {
+          currentLine = testLine;
+        }
       }
+      if (currentLine) lines.push(currentLine);
     }
-    if (currentLine) lines.push(currentLine);
     return lines;
   }
 
-  // စာတန်းထိုးပါ Video ကို Duration မပျက်ဘဲ ဒေါင်းလုဒ်ဆွဲပေးသည့် စနစ်
+  // စာတန်းထိုးပါ Video ကို ကြာချိန်မပျက်ဘဲ တိုက်ရိုက်ဒေါင်းလုဒ် ဆွဲပေးသည့် စနစ်
   exportVideoBtn.addEventListener('click', async () => {
-    parsedSubtitles = parseSRT(srtEditor.value);
-    if (!parsedSubtitles.length) return alert("စာတန်းထိုး အရင်ထုတ်ယူပါ");
+    updateSubtitlesFromEditor();
+    if (!parsedSubtitles.length) {
+      return alert("စာတန်းထိုး မရှိသေးပါ။ အပေါ်က ခလုတ်ဖြင့် စာတန်းထိုး အရင်ထုတ်ပါ");
+    }
 
     exportVideoBtn.disabled = true;
-    statusText.textContent = "ဗီဒီယိုကို Render ပြုလုပ်နေပါသည် (မပိတ်ဘဲ စောင့်ပေးပါ)...";
+    directDownloadLink.style.display = "none";
+    statusText.textContent = "ဗီဒီယိုကို Render ပြုလုပ်နေပါသည် (မပိတ်ဘဲ ခဏစောင့်ပါ)...";
 
     const canvas = document.createElement('canvas');
     canvas.width = player.videoWidth || 720;
@@ -417,8 +486,12 @@ Return ONLY raw SRT text without markdown fences.`;
       console.warn("Audio bypass:", e);
     }
 
-    let mimeType = 'video/webm;codecs=vp8,opus';
-    if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = 'video/webm';
+    let mimeType = 'video/mp4';
+    let fileExt = 'mp4';
+    if (!MediaRecorder.isTypeSupported('video/mp4')) {
+      mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus') ? 'video/webm;codecs=vp8,opus' : 'video/webm';
+      fileExt = 'webm';
+    }
 
     const recorder = new MediaRecorder(stream, { mimeType });
     const chunks = [];
@@ -439,23 +512,24 @@ Return ONLY raw SRT text without markdown fences.`;
       const durationMs = Math.round((player.duration || 60) * 1000);
 
       const triggerDownload = (finalBlob) => {
-        const url = URL.createObjectURL(finalBlob);
+        const downloadUrl = URL.createObjectURL(finalBlob);
+        directDownloadLink.href = downloadUrl;
+        directDownloadLink.download = `Subtitled_${Date.now()}.${fileExt}`;
+        directDownloadLink.style.display = "block";
+
         const a = document.createElement('a');
-        a.href = url;
-        a.download = `Subtitled_${Date.now()}.webm`;
+        a.href = downloadUrl;
+        a.download = `Subtitled_${Date.now()}.${fileExt}`;
         document.body.appendChild(a);
         a.click();
-        setTimeout(() => {
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
-        }, 3000);
-        statusText.textContent = "ဗီဒီယို ဒေါင်းလုဒ်ဆွဲယူပြီးပါပြီ! Gallery တွင် စစ်ဆေးနိုင်ပါသည်။";
+        setTimeout(() => { document.body.removeChild(a); }, 1500);
+
+        statusText.textContent = "ဗီဒီယို ဒေါင်းလုဒ်ဆွဲပြီးပါပြီ! (မကျပါက အစိမ်းရောင်ခလုတ်ကို နှိပ်ပါ)";
         exportVideoBtn.disabled = false;
         player.pause();
       };
 
-      // ကြာချိန် (Timeline Duration) အမှန်ကို WebM ထဲသို့ ထည့်သွင်းပေးခြင်း
-      if (typeof ysFixWebmDuration === 'function' && durationMs > 0) {
+      if (typeof ysFixWebmDuration === 'function' && fileExt === 'webm' && durationMs > 0) {
         ysFixWebmDuration(rawBlob, durationMs, (fixedBlob) => {
           triggerDownload(fixedBlob);
         });
@@ -475,7 +549,6 @@ Return ONLY raw SRT text without markdown fences.`;
       await player.play();
     }
 
-    // Video ပြီးသွားပါက အလိုအလျောက် ရပ်တန့်ပေးမည့် Listener
     player.onended = () => {
       finishRecording();
     };
@@ -491,33 +564,31 @@ Return ONLY raw SRT text without markdown fences.`;
         statusText.textContent = `ဗီဒီယို Render ထုတ်နေပါသည် (${progress}%)...`;
 
         const active = parsedSubtitles.find(s => cur >= s.start && cur <= s.end);
-        if (active) {
-          const fontSize = Math.floor(canvas.width * 0.045);
+        if (active && active.text) {
+          const fontSize = Math.floor(canvas.width * 0.046);
           ctx.font = `bold ${fontSize}px "Pyidaungsu", "Myanmar Text", sans-serif`;
           ctx.textAlign = "center";
 
-          const maxTextWidth = canvas.width * 0.85;
+          const maxTextWidth = canvas.width * 0.82;
           const lines = wrapBurmeseText(ctx, active.text, maxTextWidth);
           const lineHeight = fontSize * 1.45;
           const totalTextHeight = lines.length * lineHeight;
           const startY = canvas.height - (canvas.height * 0.12) - (totalTextHeight / 2);
 
-          // စာသားနောက်ခံ အမည်းရောင် Box လေး ထည့်သွင်းပေးခြင်း (ပိုမိုဖတ်ရလွယ်စေရန်)
           ctx.fillStyle = "rgba(0, 0, 0, 0.65)";
-          const boxPadding = fontSize * 0.5;
-          const boxWidth = Math.min(canvas.width * 0.92, maxTextWidth + boxPadding * 2);
+          const boxPadding = fontSize * 0.45;
+          const boxWidth = Math.min(canvas.width * 0.90, maxTextWidth + boxPadding * 2);
           ctx.fillRect(
             (canvas.width - boxWidth) / 2,
-            startY - fontSize * 0.9,
+            startY - fontSize * 0.85,
             boxWidth,
             totalTextHeight + boxPadding
           );
 
-          // စာသားများ ရေးဆွဲခြင်း
           lines.forEach((line, index) => {
             const y = startY + (index * lineHeight);
             ctx.strokeStyle = "#000000";
-            ctx.lineWidth = Math.max(3, Math.floor(fontSize * 0.15));
+            ctx.lineWidth = Math.max(3, Math.floor(fontSize * 0.16));
             ctx.strokeText(line, canvas.width / 2, y);
 
             ctx.fillStyle = "#FFE500";
