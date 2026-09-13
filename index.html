@@ -29,22 +29,38 @@
     .status { font-size: 0.8rem; text-align: center; color: #8b949e; min-height: 18px; line-height: 1.4; word-break: break-all; }
     .preview-box { display: none; flex-direction: column; gap: 10px; }
     
-    .video-container { display: flex; justify-content: center; background: #000; border-radius: 8px; overflow: hidden; }
-    .video-wrapper { position: relative; display: inline-block; max-width: 100%; }
-    video { display: block; max-height: 420px; max-width: 100%; object-fit: contain; }
+    /* Fullscreen အမှားမဖြစ်စေသော Responsive Video Wrapper */
+    .video-container { display: flex; justify-content: center; background: #000; border-radius: 8px; overflow: hidden; position: relative; }
+    .video-wrapper { position: relative; display: inline-block; width: 100%; }
+    video { display: block; width: 100%; max-height: 420px; object-fit: contain; background: #000; }
+    
     .subtitle-overlay { 
       position: absolute; 
-      bottom: 25px; 
-      left: 12px; 
-      right: 12px; 
+      bottom: 45px; 
+      left: 10px; 
+      right: 10px; 
       text-align: center; 
       color: #ffff00; 
-      font-size: 1.05rem; 
-      font-weight: bold; 
+      font-size: 1.1rem; 
+      font-weight: 700; 
       text-shadow: 2px 2px 3px #000, -2px -2px 3px #000, 2px -2px 3px #000, -2px 2px 3px #000; 
       pointer-events: none;
-      line-height: 1.4;
+      line-height: 1.35;
       word-wrap: break-word;
+      z-index: 10;
+    }
+
+    .fs-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: rgba(0,0,0,0.6);
+      color: #fff;
+      border: 1px solid #555;
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      z-index: 20;
     }
     
     textarea { height: 170px; resize: vertical; line-height: 1.4; font-family: monospace; }
@@ -55,7 +71,7 @@
 <div class="container">
   <div class="header">
     <h2>Wai & Myat Video Subtitle Studio</h2>
-    <p>Gemini & Groq (Auto Fallback & Direct Video Export)</p>
+    <p>Gemini & Groq (Auto Fallback & Accurate Subtitles)</p>
   </div>
 
   <div class="card">
@@ -85,10 +101,11 @@
 
   <div class="card preview-box" id="resultCard">
     <label>🎬 Video ပေါ်တွင် စာတန်းထိုး တိုက်စစ်ခြင်း</label>
-    <div class="video-container">
+    <div class="video-container" id="videoContainer">
       <div class="video-wrapper">
         <video id="player" controls playsinline></video>
         <div class="subtitle-overlay" id="subOverlay"></div>
+        <button class="fs-btn" id="customFsBtn">⛶ စာတန်းပါ Fullscreen</button>
       </div>
     </div>
     
@@ -119,9 +136,21 @@
   const syncBtn = document.getElementById('syncBtn');
   const downloadSrtBtn = document.getElementById('downloadSrtBtn');
   const exportVideoBtn = document.getElementById('exportVideoBtn');
+  const customFsBtn = document.getElementById('customFsBtn');
+  const videoContainer = document.getElementById('videoContainer');
 
   if (localStorage.getItem('gemini_api_key')) geminiKey.value = localStorage.getItem('gemini_api_key');
   if (localStorage.getItem('groq_api_key')) groqKey.value = localStorage.getItem('groq_api_key');
+
+  // Fullscreen ဝင်ရင် စာတန်းပါ တပါတည်းပါအောင် ပြုလုပ်ခြင်း
+  customFsBtn.addEventListener('click', () => {
+    if (!document.fullscreenElement) {
+      if (videoContainer.requestFullscreen) videoContainer.requestFullscreen();
+      else if (videoContainer.webkitRequestFullscreen) videoContainer.webkitRequestFullscreen();
+    } else {
+      if (document.exitFullscreen) document.exitFullscreen();
+    }
+  });
 
   videoInput.addEventListener('change', (e) => {
     selectedFile = e.target.files[0];
@@ -337,7 +366,27 @@ Return ONLY raw SRT text without markdown fences.`;
     a.click();
   });
 
-  // စာတန်းထိုးပါပြီးသား Video ဖိုင်ကို ဒေါင်းလုဒ်ဆွဲသည့် အသစ်ပြင်ဆင်ထားသော စနစ်
+  // စာကြောင်းများ ရှည်ပါက ဘေးမပြတ်အောင် ၂ ကြောင်းခွဲပေးသည့် Utility
+  function wrapText(context, text, maxWidth) {
+    let words = text.split(" ");
+    let lines = [];
+    let currentLine = words[0];
+
+    for (let i = 1; i < words.length; i++) {
+      let word = words[i];
+      let width = context.measureText(currentLine + " " + word).width;
+      if (width < maxWidth) {
+        currentLine += " " + word;
+      } else {
+        lines.push(currentLine);
+        currentLine = word;
+      }
+    }
+    lines.push(currentLine);
+    return lines;
+  }
+
+  // စာတန်းထိုးပါ Video အသစ် Export ပြုလုပ်ခြင်း
   exportVideoBtn.addEventListener('click', async () => {
     parsedSubtitles = parseSRT(srtEditor.value);
     if (!parsedSubtitles.length) return alert("စာတန်းထိုး အရင်ထုတ်ယူပါ");
@@ -346,13 +395,13 @@ Return ONLY raw SRT text without markdown fences.`;
     statusText.textContent = "Render စတင်နေပါသည်... စက္ကန့်ပိုင်းအတွင်း ဒေါင်းလုဒ်ကျပါမည်...";
 
     const canvas = document.createElement('canvas');
+    // Resolution မပျက်စေရန် အစစ်အမှန် Size အသုံးပြုခြင်း
     canvas.width = player.videoWidth || 720;
     canvas.height = player.videoHeight || 1280;
     const ctx = canvas.getContext('2d');
 
     const stream = canvas.captureStream(30);
 
-    // Audio capture
     try {
       const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       const source = audioCtx.createMediaElementSource(player);
@@ -363,15 +412,11 @@ Return ONLY raw SRT text without markdown fences.`;
         stream.addTrack(dest.stream.getAudioTracks()[0]);
       }
     } catch (e) {
-      console.warn("Audio pass", e);
+      console.warn("Audio error", e);
     }
 
-    let mimeType = 'video/webm';
-    if (MediaRecorder.isTypeSupported('video/webm;codecs=vp8')) {
-      mimeType = 'video/webm;codecs=vp8';
-    } else if (MediaRecorder.isTypeSupported('video/mp4')) {
-      mimeType = 'video/mp4';
-    }
+    let mimeType = 'video/webm;codecs=vp8';
+    if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = 'video/webm';
 
     const recorder = new MediaRecorder(stream, { mimeType });
     const chunks = [];
@@ -384,9 +429,7 @@ Return ONLY raw SRT text without markdown fences.`;
     const finishRecording = () => {
       if (isFinished) return;
       isFinished = true;
-      if (recorder.state !== 'inactive') {
-        recorder.stop();
-      }
+      if (recorder.state !== 'inactive') recorder.stop();
     };
 
     recorder.onstop = () => {
@@ -408,8 +451,8 @@ Return ONLY raw SRT text without markdown fences.`;
 
     recorder.start(500);
     player.currentTime = 0;
-    
-    // ဖုန်း browser တွေ autoplay ကန့်သတ်ချက် မဖြစ်စေရန်
+    player.muted = false;
+
     try {
       await player.play();
     } catch (err) {
@@ -417,7 +460,6 @@ Return ONLY raw SRT text without markdown fences.`;
       await player.play();
     }
 
-    // ဗီဒီယို ကြာချိန်ပြည့်သွားပါက အလိုအလျောက် ရပ်ပြီး download ပေးမည့် Safety Timeout
     const maxDuration = (player.duration || 60) * 1000 + 1500;
     const safetyTimer = setTimeout(() => {
       finishRecording();
@@ -440,18 +482,24 @@ Return ONLY raw SRT text without markdown fences.`;
 
       const active = parsedSubtitles.find(s => cur >= s.start && cur <= s.end);
       if (active) {
-        const fontSize = Math.floor(canvas.height * 0.040);
+        // စာလုံးအရွယ်အစားကို ဖတ်ရလွယ်ကူပြီး မပြတ်စေရန် ချိန်ညှိခြင်း
+        const fontSize = Math.floor(canvas.width * 0.048);
         ctx.font = `bold ${fontSize}px sans-serif`;
         ctx.textAlign = "center";
         ctx.fillStyle = "#ffff00";
         ctx.strokeStyle = "#000000";
-        ctx.lineWidth = Math.max(3, Math.floor(fontSize * 0.16));
+        ctx.lineWidth = Math.max(3, Math.floor(fontSize * 0.18));
 
-        const x = canvas.width / 2;
-        const y = canvas.height - (canvas.height * 0.10);
+        const maxTextWidth = canvas.width * 0.88;
+        const lines = wrapText(ctx, active.text, maxTextWidth);
+        const lineHeight = fontSize * 1.3;
+        const startY = canvas.height - (canvas.height * 0.09) - ((lines.length - 1) * lineHeight);
 
-        ctx.strokeText(active.text, x, y);
-        ctx.fillText(active.text, x, y);
+        lines.forEach((line, index) => {
+          const y = startY + (index * lineHeight);
+          ctx.strokeText(line, canvas.width / 2, y);
+          ctx.fillText(line, canvas.width / 2, y);
+        });
       }
 
       requestAnimationFrame(renderLoop);
