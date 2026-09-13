@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Wai & Myat - Hybrid Video SRT Studio</title>
+  <title>Wai & Myat - Video SRT Studio</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
     body { background-color: #0b0f17; color: #e6edf3; padding: 16px 12px; display: flex; justify-content: center; min-height: 100vh; }
@@ -55,13 +55,13 @@
 <div class="container">
   <div class="header">
     <h2>Wai & Myat Video Subtitle Studio</h2>
-    <p>Gemini & Groq (Auto Fallback / မျှသုံးစနစ်)</p>
+    <p>Gemini & Groq (Auto Fallback & Direct Video Export)</p>
   </div>
 
   <div class="card">
     <label>အလုပ်လုပ်မည့် ပုံစံ</label>
     <select id="modeSelect">
-      <option value="auto">🔄 Gemini + Groq Auto Fallback (Gemini ကြပ်ရင် Groq ကို အလိုအလျောက် သုံးမည်)</option>
+      <option value="auto">🔄 Gemini + Groq Auto Fallback (အကြံပြုထားသည်)</option>
       <option value="gemini_only">Google Gemini သီးသန့်</option>
       <option value="groq_only">Groq (Whisper + Llama) သီးသန့်</option>
     </select>
@@ -184,6 +184,7 @@
   }
 
   function parseSRT(data) {
+    if (!data) return [];
     const regex = /(\d+)\s+(\d{2}:\d{2}:\d{2}[,\.]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[,\.]\d{3})\s+([\s\S]*?)(?=\n\s*\n|\n*$)/g;
     const items = [];
     let match;
@@ -208,7 +209,6 @@
     subOverlay.textContent = active ? active.text : "";
   });
 
-  // Call Gemini API
   async function runGemini(audioData, key) {
     const base64 = bytesToBase64(audioData.bytes);
     const prompt = `Listen carefully. Translate all dialogue into natural spoken Burmese (မြန်မာစကားပြော).
@@ -236,7 +236,6 @@ Return ONLY raw SRT text without markdown fences.`;
     return data.candidates[0].content.parts[0].text;
   }
 
-  // Call Groq API (Whisper + Llama 3)
   async function runGroq(audioData, key) {
     statusText.textContent = "Groq Whisper ဖြင့် အသံဖမ်းယူနေပါသည်...";
     const formData = new FormData();
@@ -298,13 +297,11 @@ Return ONLY raw SRT text without markdown fences.`;
         statusText.textContent = "Gemini AI ဖြင့် မြန်မာစာတန်းထိုး ထုတ်ပေးနေပါသည်...";
         rawSrt = await runGemini(audioData, gKey);
       } else {
-        // AUTO FALLBACK MODE (Gemini အရင်စမ်းမည်၊ ကြပ်ပါက Groq သို့ ပြောင်းမည်)
         try {
           if (!gKey) throw new Error("No Gemini Key");
           statusText.textContent = "Gemini AI ဖြင့် စတင်ဆောင်ရွက်နေပါသည်...";
           rawSrt = await runGemini(audioData, gKey);
         } catch (geminiErr) {
-          console.warn("Gemini Error, switching to Groq:", geminiErr);
           if (grKey) {
             statusText.textContent = "Gemini High Demand ဖြစ်နေသဖြင့် Groq သို့ အလိုအလျောက် ပြောင်းသုံးနေပါသည်...";
             rawSrt = await runGroq(audioData, grKey);
@@ -340,8 +337,15 @@ Return ONLY raw SRT text without markdown fences.`;
     a.click();
   });
 
+  // စာတန်းထိုးပါ ဗီဒီယို Render ထုတ်လုပ် သိမ်းဆည်းခြင်း
   exportVideoBtn.addEventListener('click', async () => {
-    if (!parsedSubtitles.length) return alert("စာတန်းထိုး အရင်ထုတ်ယူပါ");
+    // အကယ်၍ parsedSubtitles ထဲ မရောက်သေးပါက Textarea ထဲက စာကို တိုက်ရိုက်ဖတ်ယူခြင်း
+    if (!parsedSubtitles.length) {
+      parsedSubtitles = parseSRT(srtEditor.value);
+    }
+    if (!parsedSubtitles.length) {
+      return alert("စာတန်းထိုး အရင်ထုတ်ယူပါ");
+    }
 
     exportVideoBtn.disabled = true;
     statusText.textContent = "စာတန်းထိုးထားသော Video ကို Export ထုတ်နေပါသည် (ခဏစောင့်ပါ)...";
