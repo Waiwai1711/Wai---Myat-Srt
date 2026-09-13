@@ -28,7 +28,6 @@
     .status { font-size: 0.8rem; text-align: center; color: #8b949e; min-height: 18px; line-height: 1.4; word-break: break-all; }
     .preview-box { display: none; flex-direction: column; gap: 10px; }
     
-    /* ဗီဒီယိုပေါ်တွင် စာတန်းထိုး ကပ်ပြမည့် ပုံစံ */
     .video-wrapper { position: relative; width: 100%; border-radius: 8px; overflow: hidden; background: black; }
     video { width: 100%; display: block; max-height: 380px; object-fit: contain; }
     .subtitle-overlay { 
@@ -44,7 +43,6 @@
       pointer-events: none;
       line-height: 1.4;
     }
-    
     textarea { height: 180px; resize: vertical; line-height: 1.4; font-family: monospace; }
   </style>
 </head>
@@ -53,28 +51,40 @@
 <div class="container">
   <div class="header">
     <h2>Wai & Myat Video Subtitle Studio</h2>
-    <p>Gemini AI ဖြင့် မြန်မာစာတန်းထိုးထုတ်ခြင်း၊ ပြင်ဆင်ခြင်းနှင့် Video တိုက်စစ်စနစ်</p>
+    <p>Gemini & Groq (High Demand ကာကွယ်ရေးစနစ်)</p>
   </div>
 
   <div class="card">
-    <label>Gemini API Key</label>
-    <input type="password" id="apiKey" placeholder="AIzaSy...">
-
-    <label>Gemini Model</label>
-    <select id="modelSelect">
-      <option value="gemini-2.5-flash">Gemini 2.5 Flash (အမြန်ဆုံး & အတိကျဆုံး)</option>
-      <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
-      <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+    <label>အသုံးပြုမည့် AI Engine ရွေးပါ</label>
+    <select id="engineSelect">
+      <option value="gemini">Google Gemini Engine</option>
+      <option value="groq">Groq Engine (High Speed / No Delay)</option>
     </select>
 
-    <label>ဗီဒီယို ရွေးချယ်ပါ (mp4/webm)</label>
+    <div id="geminiBox">
+      <label>Gemini API Key</label>
+      <input type="password" id="geminiKey" placeholder="AIzaSy...">
+      <label style="margin-top:6px;">Gemini Model</label>
+      <select id="geminiModel">
+        <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+        <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+        <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+      </select>
+    </div>
+
+    <div id="groqBox" style="display:none;">
+      <label>Groq API Key (console.groq.com မှ အခမဲ့ယူနိုင်)</label>
+      <input type="password" id="groqKey" placeholder="gsk_...">
+    </div>
+
+    <label>ဗီဒီယိုဖိုင် ရွေးချယ်ပါ (mp4/webm)</label>
     <label for="videoInput" class="file-drop-area">
       <div>📁 ဗီဒီယိုဖိုင် ရွေးရန် နှိပ်ပါ</div>
       <div class="file-name" id="fileName"></div>
     </label>
     <input type="file" id="videoInput" accept="video/*" style="display:none">
 
-    <button class="btn-primary" id="processBtn">ဗီဒီယိုမှ မြန်မာစာတန်းထိုး ထုတ်မည်</button>
+    <button class="btn-primary" id="processBtn">မြန်မာစာတန်းထိုး ထုတ်မည်</button>
     <div class="status" id="statusText"></div>
   </div>
 
@@ -85,8 +95,8 @@
       <div class="subtitle-overlay" id="subOverlay"></div>
     </div>
     
-    <label>✏️ မြန်မာ SRT စာသားများကို စိတ်ကြိုက် ပြင်ဆင်နိုင်ပါသည် (Edit Box)</label>
-    <textarea id="srtEditor" placeholder="SRT စာသားများကို ဤနေရာတွင် တိုက်ရိုက် ပြင်ဆင်နိုင်ပါသည်..."></textarea>
+    <label>✏️ မြန်မာ SRT စာသားများကို ပြင်ဆင်နိုင်ပါသည် (Edit Box)</label>
+    <textarea id="srtEditor"></textarea>
     
     <button class="btn-update" id="syncBtn">🔄 ပြင်ဆင်ချက်များကို Video ပေါ် အသစ်ပြန်တင်မည်</button>
     <button class="btn-action" id="downloadSrtBtn">📥 ပြင်ဆင်ပြီး SRT ဖိုင် ဒေါင်းလုဒ်ဆွဲမည်</button>
@@ -97,8 +107,12 @@
   let selectedFile = null;
   let parsedSubtitles = [];
 
-  const apiKeyInput = document.getElementById('apiKey');
-  const modelSelect = document.getElementById('modelSelect');
+  const engineSelect = document.getElementById('engineSelect');
+  const geminiBox = document.getElementById('geminiBox');
+  const groqBox = document.getElementById('groqBox');
+  const geminiKey = document.getElementById('geminiKey');
+  const groqKey = document.getElementById('groqKey');
+  const geminiModel = document.getElementById('geminiModel');
   const videoInput = document.getElementById('videoInput');
   const fileName = document.getElementById('fileName');
   const processBtn = document.getElementById('processBtn');
@@ -110,9 +124,18 @@
   const syncBtn = document.getElementById('syncBtn');
   const downloadSrtBtn = document.getElementById('downloadSrtBtn');
 
-  if (localStorage.getItem('gemini_api_key')) {
-    apiKeyInput.value = localStorage.getItem('gemini_api_key');
-  }
+  if (localStorage.getItem('gemini_api_key')) geminiKey.value = localStorage.getItem('gemini_api_key');
+  if (localStorage.getItem('groq_api_key')) groqKey.value = localStorage.getItem('groq_api_key');
+
+  engineSelect.addEventListener('change', () => {
+    if (engineSelect.value === 'groq') {
+      groqBox.style.display = 'block';
+      geminiBox.style.display = 'none';
+    } else {
+      groqBox.style.display = 'none';
+      geminiBox.style.display = 'block';
+    }
+  });
 
   videoInput.addEventListener('change', (e) => {
     selectedFile = e.target.files[0];
@@ -122,7 +145,7 @@
     }
   });
 
-  // အသံဖိုင်အရွယ်အစားကို 8000Hz ဖြင့် အလွန်သေးငယ်အောင် ချုံ့ယူခြင်း
+  // Audio Compress to 8000Hz WAV
   async function extractCompressedAudio(file) {
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     const arrayBuffer = await file.arrayBuffer();
@@ -148,7 +171,7 @@
     wStr(12, 'fmt ');
     view.setUint32(16, 16, true);
     view.setUint16(20, 1, true);
-    view.setUint16(22, 1, true); // Mono
+    view.setUint16(22, 1, true);
     view.setUint32(24, targetSampleRate, true);
     view.setUint32(28, targetSampleRate * 2, true);
     view.setUint16(32, 2, true);
@@ -163,6 +186,10 @@
     }
 
     const bytes = new Uint8Array(wavBuffer);
+    return { blob: new Blob([wavBuffer], { type: 'audio/wav' }), bytes: bytes };
+  }
+
+  function bytesToBase64(bytes) {
     let binary = '';
     const chunkSize = 8192;
     for (let i = 0; i < bytes.length; i += chunkSize) {
@@ -190,7 +217,6 @@
     return parseFloat(parts[0]) * 3600 + parseFloat(parts[1]) * 60 + parseFloat(parts[2]);
   }
 
-  // Video Play နေချိန်တွင် စာတန်းထိုးကို အချိန်ကိုက် မျက်နှာပြင်ပေါ် ထိုးပြခြင်း
   player.addEventListener('timeupdate', () => {
     const cur = player.currentTime;
     const active = parsedSubtitles.find(s => cur >= s.start && cur <= s.end);
@@ -198,27 +224,109 @@
   });
 
   processBtn.addEventListener('click', async () => {
-    const apiKey = apiKeyInput.value.trim();
-    if (!apiKey) return alert("Gemini API Key ထည့်ပေးပါ");
+    const isGroq = engineSelect.value === 'groq';
+    const gKey = geminiKey.value.trim();
+    const grKey = groqKey.value.trim();
+
+    if (!isGroq && !gKey) return alert("Gemini API Key ထည့်ပေးပါ");
+    if (isGroq && !grKey) return alert("Groq API Key ထည့်ပေးပါ");
     if (!selectedFile) return alert("ဗီဒီယိုဖိုင် အရင်ရွေးပေးပါ");
 
-    localStorage.setItem('gemini_api_key', apiKey);
+    if (gKey) localStorage.setItem('gemini_api_key', gKey);
+    if (grKey) localStorage.setItem('groq_api_key', grKey);
+
     processBtn.disabled = true;
     resultCard.style.display = "none";
-    statusText.textContent = "ဗီဒီယိုအသံကို ခွဲထုတ်ချုံ့ယူနေပါသည်...";
-
-    const chosenModel = modelSelect.value;
+    statusText.textContent = "အသံဖိုင်ကို စစ်ဆေးချုံ့ယူနေပါသည်...";
 
     try {
-      const audioBase64 = await extractCompressedAudio(selectedFile);
-      statusText.textContent = `${chosenModel} ဖြင့် မြန်မာစကားပြော စာတန်းထိုး ထုတ်ပေးနေပါသည်...`;
+      const audioData = await extractCompressedAudio(selectedFile);
+      let rawSrt = "";
 
-      const prompt = `Listen to this audio carefully.
-Translate all dialogue into natural, conversational spoken Burmese language (မြန်မာစကားပြော အသုံးအနှုန်း).
-Format strictly as standard valid SRT format with accurate timestamps:
+      if (isGroq) {
+        statusText.textContent = "Groq Whisper ဖြင့် အသံဖမ်းယူနေပါသည်...";
+        const formData = new FormData();
+        formData.append('file', audioData.blob, 'audio.wav');
+        formData.append('model', 'whisper-large-v3');
+        formData.append('response_format', 'srt');
+
+        const whisperRes = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${grKey}` },
+          body: formData
+        });
+        const originalSrt = await whisperRes.text();
+
+        statusText.textContent = "Groq Llama 3 ဖြင့် မြန်မာစကားပြော ပြန်ဆိုနေပါသည်...";
+        const transRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${grKey}`
+          },
+          body: JSON.stringify({
+            model: "llama-3.3-70b-versatile",
+            messages: [{
+              role: "user",
+              content: `Translate all dialogue in this SRT to natural spoken Burmese (မြန်မာစကားပြော). Strictly keep the same timestamps and index numbers. Return ONLY valid SRT:\n\n${originalSrt}`
+            }]
+          })
+        });
+        const transData = await transRes.json();
+        rawSrt = transData.choices[0].message.content;
+      } else {
+        statusText.textContent = `${geminiModel.value} ဖြင့် ဘာသာပြန်နေပါသည်...`;
+        const base64 = bytesToBase64(audioData.bytes);
+        const prompt = `Listen carefully. Translate all dialogue into natural, conversational spoken Burmese (မြန်မာစကားပြော).
+Format strictly as standard SRT:
 1
 00:00:01,000 --> 00:00:03,500
 [မြန်မာစကားပြော]
-Rules:
-- Strictly return plain raw SRT text.
-- Do NOT wrap in markdown code blocks
+Return ONLY raw SRT text without markdown fences.`;
+
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${geminiModel.value}:generateContent?key=${gKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{
+              parts: [
+                { inlineData: { mimeType: "audio/wav", data: base64 } },
+                { text: prompt }
+              ]
+            }]
+          })
+        });
+
+        const data = await response.json();
+        if (data.error) throw new Error(data.error.message);
+        rawSrt = data.candidates[0].content.parts[0].text;
+      }
+
+      rawSrt = rawSrt.replace(/^```srt\n?|^```\n?|```$/gm, '').trim();
+      srtEditor.value = rawSrt;
+      parsedSubtitles = parseSRT(rawSrt);
+
+      resultCard.style.display = "flex";
+      statusText.textContent = "အောင်မြင်စွာ ပြီးဆုံးပါပြီ! Video ဖြင့် တိုက်စစ်နိုင်ပါပြီ။";
+    } catch (err) {
+      statusText.textContent = "Error: " + err.message;
+    } finally {
+      processBtn.disabled = false;
+    }
+  });
+
+  syncBtn.addEventListener('click', () => {
+    parsedSubtitles = parseSRT(srtEditor.value);
+    alert("ပြင်ဆင်ချက်များကို Video ပေါ် ချိတ်ဆက်လိုက်ပါပြီ!");
+  });
+
+  downloadSrtBtn.addEventListener('click', () => {
+    const blob = new Blob([srtEditor.value], { type: 'text/plain;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = "Subtitles_Edited.srt";
+    a.click();
+  });
+</script>
+</body>
+</html>
