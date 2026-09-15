@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>THET × DeepLearn AI Recap Studio</title>
+  <title>Waiwai AI Recap Studio</title>
 
-  <!-- အတည်ငြိမ်ဆုံး FFmpeg 0.11.6 (Worker / CORS Error လုံးဝ မရှိပါ) -->
+  <!-- Stable FFmpeg 0.11.6 -->
   <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
 
   <style>
@@ -71,7 +71,6 @@
     <div class="badge">Stable Version</div>
   </div>
 
-  <!-- Stable Engine Loader Card -->
   <div class="card" id="engine-card">
     <div class="card-title">⚙️ AI Engine Status</div>
     <div class="card-desc" id="engine-status-text">
@@ -80,7 +79,6 @@
     <div class="progress-bar-bg"><div class="progress-bar" id="engine-progress"></div></div>
   </div>
 
-  <!-- Step 1: Video Upload -->
   <div class="card">
     <div class="card-title">Step 1: Video တင်ပါ</div>
     <div class="card-desc">Recap လုပ်မည့် video ကို ရွေးချယ်ပါ (အသံကို အရင်ဆွဲထုတ်ပါမည်)</div>
@@ -91,7 +89,6 @@
     <button class="btn" id="transcribe-btn" onclick="startTranscribe()">Step 1: အသံထုတ်မည် ▶</button>
   </div>
 
-  <!-- Step 2: Source Text & Prompt -->
   <div class="card">
     <div class="card-title">Step 2: မူရင်းစာသားကို စစ်ဆေးပါ (Source Text)</div>
     <div class="card-desc">Time Frame ပါဝင်သော မူရင်း စကားပြောစာသားများ:</div>
@@ -104,7 +101,6 @@
     <button class="btn" onclick="applyTranslation()">Submit Translation ▶</button>
   </div>
 
-  <!-- Step 3: Burmese Script & TTS -->
   <div class="card">
     <div class="card-title">Step 3: မြန်မာဘာသာပြန်နှင့် အသံဖန်တီးခြင်း</div>
     <div class="card-desc">အောက်ပါ မြန်မာစာကြောင်းများကို လိုအပ်ပါက ပြင်ဆင်နိုင်ပါသည်:</div>
@@ -132,7 +128,6 @@
     </div>
   </div>
 
-  <!-- Step 4: Real FFmpeg Render -->
   <div class="card">
     <div class="card-title">Step 4: ရလဒ်များ (Results)</div>
     <div class="card-desc">
@@ -177,7 +172,6 @@
     localStorage.setItem('aai_key', document.getElementById('aai-key').value.trim());
   }
 
-  // အလွန်တည်ငြိမ်သော FFmpeg 0.11.6 ကို အသုံးပြုခြင်း (Error လုံးဝမတက်ပါ)
   async function initStableEngine() {
     const statusText = document.getElementById('engine-status-text');
     const progressBar = document.getElementById('engine-progress');
@@ -217,42 +211,24 @@
     }
   }
 
+  // ဒီနေရာက အသစ် - FFmpeg Engine သုံးပြီး MP3 ဖိုင်ဆိုဒ်အသေးစား (32k) ထုတ်ပေးမယ့် အပိုင်း
   async function extractAudioFast(videoFile) {
-    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const arrayBuffer = await videoFile.arrayBuffer();
-    const decoded = await audioCtx.decodeAudioData(arrayBuffer);
-    const offlineCtx = new OfflineAudioContext(1, decoded.duration * 16000, 16000);
-    const source = offlineCtx.createBufferSource();
-    source.buffer = decoded;
-    source.connect(offlineCtx.destination);
-    source.start(0);
-    const rendered = await offlineCtx.startRendering();
-
-    const data = rendered.getChannelData(0);
-    const buffer = new ArrayBuffer(44 + data.length * 2);
-    const view = new DataView(buffer);
-
-    function writeString(v, o, s) { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); }
-    writeString(view, 0, 'RIFF');
-    view.setUint32(4, 36 + data.length * 2, true);
-    writeString(view, 8, 'WAVE');
-    writeString(view, 12, 'fmt ');
-    view.setUint32(16, 16, true);
-    view.setUint16(20, 1, true);
-    view.setUint16(22, 1, true);
-    view.setUint32(24, 16000, true);
-    view.setUint32(28, 32000, true);
-    view.setUint16(32, 2, true);
-    view.setUint16(34, 16, true);
-    writeString(view, 36, 'data');
-    view.setUint32(40, data.length * 2, true);
-
-    let offset = 44;
-    for (let i = 0; i < data.length; i++, offset += 2) {
-      let s = Math.max(-1, Math.min(1, data[i]));
-      view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
-    }
-    return new Blob([view], { type: 'audio/wav' });
+    if (!isEngineReady) throw new Error("အင်ဂျင် မတက်သေးပါ။");
+    
+    // Video ကို FFmpeg ရဲ့ Memory ထဲ ထည့်ခြင်း
+    ffmpeg.FS('writeFile', 'input_temp.mp4', await fetchFile(videoFile));
+    
+    // MP3 အဖြစ် မြန်မြန် Convert လုပ်ခြင်း
+    await ffmpeg.run('-i', 'input_temp.mp4', '-vn', '-ac', '1', '-ar', '16000', '-b:a', '32k', 'audio_temp.mp3');
+    
+    // ပြောင်းပြီးသား MP3 အသံဖိုင်ကို ဖတ်ယူခြင်း
+    const data = ffmpeg.FS('readFile', 'audio_temp.mp3');
+    
+    // Memory ရှင်းထုတ်ခြင်း
+    ffmpeg.FS('unlink', 'input_temp.mp4');
+    ffmpeg.FS('unlink', 'audio_temp.mp3');
+    
+    return new Blob([data.buffer], { type: 'audio/mp3' });
   }
 
   async function startTranscribe() {
@@ -261,10 +237,10 @@
 
     const statusBox = document.getElementById('source-text');
     try {
-      statusBox.value = "Audio ကို ဆွဲထုတ်နေပါသည်...";
+      statusBox.value = "Engine ဖြင့် Audio ကို MP3 အဖြစ် အမြန်ခွဲထုတ်နေပါသည်...";
       const audioBlob = await extractAudioFast(uploadedVideoFile);
 
-      statusBox.value = `Audio (${(audioBlob.size/1024/1024).toFixed(1)}MB) တင်ပို့နေပါသည်...`;
+      statusBox.value = `Audio (${(audioBlob.size/1024/1024).toFixed(2)}MB) အမြန်တင်ပို့နေပါသည်...`;
       const uploadRes = await fetch("https://api.assemblyai.com/v2/upload", {
         method: "POST",
         headers: { "authorization": key },
@@ -272,7 +248,7 @@
       });
       const { upload_url } = await uploadRes.json();
 
-      statusBox.value = "AI Nano Model ဖြင့် စာသားပြောင်းနေပါသည်...";
+      statusBox.value = "AI Nano Model ဖြင့် စာသားအမြန်ပြောင်းနေပါသည်...";
       const transcriptRes = await fetch("https://api.assemblyai.com/v2/transcript", {
         method: "POST",
         headers: { "authorization": key, "content-type": "application/json" },
