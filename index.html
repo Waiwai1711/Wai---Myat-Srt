@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>THET × DeepLearn AI Recap Studio</title>
   
-  <!-- FFmpeg.wasm Official Core Scripts -->
+  <!-- FFmpeg.wasm Scripts -->
   <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js"></script>
   <script src="https://unpkg.com/@ffmpeg/util@0.12.1/dist/umd/index.js"></script>
 
@@ -52,7 +52,7 @@
     video { max-height: 260px; object-fit: contain; }
 
     .progress-bar-bg { width: 100%; height: 8px; background: #1e293b; border-radius: 4px; overflow: hidden; margin-top: 6px; }
-    .progress-bar { width: 0%; height: 100%; background: #f97316; transition: width 0.2s ease; }
+    .progress-bar { width: 0%; height: 100%; background: #8b5cf6; transition: width 0.2s ease; }
 
     .voice-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     .voice-btn {
@@ -78,7 +78,7 @@
     <div class="card-desc" id="engine-status-text">
       ပထမဆုံးအကြိမ် စတင်သုံးစွဲသူဖြစ်တဲ့အတွက် အင်ဂျင်ကို တပ်ဆင်နေပါတယ်... (Downloading Engine - ~30MB)
     </div>
-    <div class="progress-bar-bg"><div class="progress-bar" id="engine-progress" style="background:#8b5cf6;"></div></div>
+    <div class="progress-bar-bg"><div class="progress-bar" id="engine-progress"></div></div>
   </div>
 
   <!-- Step 1: Video Upload -->
@@ -146,7 +146,7 @@
 
     <div id="render-box" style="display:none; margin-top:8px;">
       <div class="card-desc" id="render-status-text">Processing with FFmpeg Engine... 0%</div>
-      <div class="progress-bar-bg"><div class="progress-bar" id="render-progress"></div></div>
+      <div class="progress-bar-bg"><div class="progress-bar" id="render-progress" style="background:#ea580c;"></div></div>
     </div>
 
     <div id="ready-box" style="display:none; flex-direction:column; gap:10px; margin-top:10px;">
@@ -159,6 +159,20 @@
 </div>
 
 <script>
+  // 1. Cross-Origin Worker CORS Fix (GitHub Pages အတွက် မရှိမဖြစ် Shim)
+  const NativeWorker = window.Worker;
+  window.Worker = class extends NativeWorker {
+    constructor(scriptURL, options) {
+      const urlStr = scriptURL.toString();
+      if (urlStr.startsWith('http') && !urlStr.startsWith(window.location.origin)) {
+        const blob = new Blob([`importScripts(${JSON.stringify(urlStr)});`], { type: 'application/javascript' });
+        super(URL.createObjectURL(blob), options);
+      } else {
+        super(scriptURL, options);
+      }
+    }
+  };
+
   let ffmpegInstance = null;
   let isEngineReady = false;
   let segments = [];
@@ -169,6 +183,7 @@
 
   const CACHE_NAME = 'deeplearn-ffmpeg-core-v1';
   const CORE_BASE_URL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
+  const FFMPEG_LIB_URL = 'https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd';
 
   window.onload = async () => {
     const savedKey = localStorage.getItem('aai_key');
@@ -180,7 +195,7 @@
     localStorage.setItem('aai_key', document.getElementById('aai-key').value.trim());
   }
 
-  // တကယ့် ~30MB FFmpeg Core ဖိုင်ကို ဒေါင်းလုဒ်ဆွဲပြီး Cache ထဲ ထည့်သွင်းခြင်း
+  // Engine Download & Cache Initialization
   async function initRealFFmpegEngine() {
     const statusText = document.getElementById('engine-status-text');
     const progressBar = document.getElementById('engine-progress');
@@ -189,13 +204,17 @@
       const cache = await caches.open(CACHE_NAME);
       const wasmUrl = `${CORE_BASE_URL}/ffmpeg-core.wasm`;
       const jsUrl = `${CORE_BASE_URL}/ffmpeg-core.js`;
+      const workerUrl = `${FFMPEG_LIB_URL}/814.ffmpeg.js`;
 
+      // 1. Core WASM ဖိုင် ဒေါင်းလုဒ်ဆွဲခြင်း (~31MB)
       let wasmBlob = await getCachedOrFetch(cache, wasmUrl, (pct, loadedMB, totalMB) => {
         progressBar.style.width = pct + '%';
         statusText.innerText = `အင်ဂျင်ကို တပ်ဆင်နေပါသည်... (${loadedMB} MB / ~${totalMB} MB - ${pct}%)`;
       });
 
+      // 2. Core JS နှင့် Worker Scripts များ ဒေါင်းလုဒ်ဆွဲခြင်း
       let jsBlob = await getCachedOrFetch(cache, jsUrl, () => {});
+      let workerBlob = await getCachedOrFetch(cache, workerUrl, () => {});
 
       const { FFmpeg } = window.FFmpegWASM;
       ffmpegInstance = new FFmpeg();
@@ -206,9 +225,11 @@
         document.getElementById('render-status-text').innerText = `Processing with Engine... ${pct}%`;
       });
 
+      // 3. Worker URL အား Local Blob အဖြစ် ထည့်သွင်းခြင်း (CORS Error မတက်တော့ပါ)
       await ffmpegInstance.load({
         coreURL: URL.createObjectURL(jsBlob),
-        wasmURL: URL.createObjectURL(wasmBlob)
+        wasmURL: URL.createObjectURL(wasmBlob),
+        classWorkerURL: URL.createObjectURL(workerBlob)
       });
 
       isEngineReady = true;
@@ -259,7 +280,7 @@
     }
   }
 
-  // Audio Extractor (Video မှ Audio အမြန်ခွဲထုတ်ခြင်း)
+  // Audio Extractor (Video -> Audio WAV)
   async function extractAudioFast(videoFile) {
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     const arrayBuffer = await videoFile.arrayBuffer();
@@ -466,7 +487,7 @@ ${inputsFormatted}`;
     }
   }
 
-  // Step 4: တကယ့် FFmpeg Engine ဖြင့် Render လုပ်ပြီး ဒေါင်းလုဒ်ထုတ်ခြင်း
+  // Step 4: FFmpeg Render
   async function startFFmpegRender() {
     if (!isEngineReady) return alert("Engine မတက်သေးပါ၊ အင်ဂျင်တပ်ဆင်ပြီးဆုံးသည်အထိ စောင့်ပါခင်ဗျာ။");
     if (!uploadedVideoFile) return alert("Video ဖိုင် အရင်ရွေးချယ်ပေးပါ။");
@@ -483,7 +504,6 @@ ${inputsFormatted}`;
     statusText.innerText = "အသံလမ်းကြောင်းကို ဗီဒီယိုနှင့် အချိန်ကိုက် ညှိနေပါသည်...";
 
     try {
-      // ၁။ Segment တစ်ခုချင်းစီ၏ Timing အတိုင်း Dubbed Audio Buffer တည်ဆောက်ခြင်း
       const sourceVideo = document.getElementById('source-video-preview');
       const totalDur = sourceVideo.duration || 60;
       const audioCtx = new OfflineAudioContext(1, Math.ceil(totalDur * 24000), 24000);
@@ -500,13 +520,11 @@ ${inputsFormatted}`;
       const renderedAudio = await audioCtx.startRendering();
       const audioWavBlob = audioBufferToWavHelper(renderedAudio);
 
-      // ၂။ FFmpeg Virtual FileSystem သို့ ဖိုင်များ ထည့်သွင်းခြင်း
       const { fetchFile } = window.FFmpegUtil;
       statusText.innerText = "FFmpeg Engine သို့ ဖိုင်များ တင်ပို့နေပါသည်...";
       await ffmpegInstance.writeFile('input.mp4', await fetchFile(uploadedVideoFile));
       await ffmpegInstance.writeFile('dubbed.wav', await fetchFile(audioWavBlob));
 
-      // ၃။ Video Codec မူရင်းအတိုင်း Copy ယူ၍ AI Audio အသစ်ဖြင့် ကွက်တိ Replace လုပ်ခြင်း
       statusText.innerText = "FFmpeg Engine ဖြင့် Video Render လုပ်နေပါသည်...";
       await ffmpegInstance.exec([
         '-i', 'input.mp4',
@@ -520,7 +538,6 @@ ${inputsFormatted}`;
         'output.mp4'
       ]);
 
-      // ၄။ ရလဒ် output.mp4 ကို ဖတ်ယူ၍ Download ချိတ်ဆက်ခြင်း
       const data = await ffmpegInstance.readFile('output.mp4');
       const finalMp4Blob = new Blob([data.buffer], { type: 'video/mp4' });
       const finalUrl = URL.createObjectURL(finalMp4Blob);
