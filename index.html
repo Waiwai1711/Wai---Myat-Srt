@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>THET × DeepLearn AI Recap Studio</title>
-  
-  <!-- FFmpeg.wasm Scripts -->
+
+  <!-- Official FFmpeg 0.12 + Util Scripts -->
   <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js"></script>
   <script src="https://unpkg.com/@ffmpeg/util@0.12.1/dist/umd/index.js"></script>
 
@@ -69,7 +69,7 @@
 <div class="container">
   <div class="header">
     <div class="logo">⚡ THET × DeepLearn AI</div>
-    <div class="badge">Recap Studio</div>
+    <div class="badge">Cloudflare Version</div>
   </div>
 
   <!-- Real ~30MB FFmpeg Engine Loader Card -->
@@ -85,7 +85,7 @@
   <div class="card">
     <div class="card-title">Step 1: Video တင်ပါ</div>
     <div class="card-desc">Recap လုပ်မည့် video ကို ရွေးချယ်ပါ (အသံကို အရင်ဆွဲထုတ်ပါမည်)</div>
-    <input type="text" id="aai-key" placeholder="AssemblyAI API Key (Required)" onchange="saveKey()">
+    <input type="text" id="aai-key" value="b433ae5d481842b8a5e34f2023fc01a5" placeholder="AssemblyAI API Key (Required)" onchange="saveKey()">
     <input type="file" id="video-file" accept="video/*" onchange="loadSourceVideo(this)">
     
     <video id="source-video-preview" controls playsinline style="display:none;"></video>
@@ -159,20 +159,6 @@
 </div>
 
 <script>
-  // 1. Cross-Origin Worker CORS Fix (GitHub Pages အတွက် မရှိမဖြစ် Shim)
-  const NativeWorker = window.Worker;
-  window.Worker = class extends NativeWorker {
-    constructor(scriptURL, options) {
-      const urlStr = scriptURL.toString();
-      if (urlStr.startsWith('http') && !urlStr.startsWith(window.location.origin)) {
-        const blob = new Blob([`importScripts(${JSON.stringify(urlStr)});`], { type: 'application/javascript' });
-        super(URL.createObjectURL(blob), options);
-      } else {
-        super(scriptURL, options);
-      }
-    }
-  };
-
   let ffmpegInstance = null;
   let isEngineReady = false;
   let segments = [];
@@ -183,38 +169,60 @@
 
   const CACHE_NAME = 'deeplearn-ffmpeg-core-v1';
   const CORE_BASE_URL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
-  const FFMPEG_LIB_URL = 'https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd';
 
   window.onload = async () => {
     const savedKey = localStorage.getItem('aai_key');
     if (savedKey) document.getElementById('aai-key').value = savedKey;
-    await initRealFFmpegEngine();
+    await initCloudflareEngine();
   };
 
   function saveKey() {
     localStorage.setItem('aai_key', document.getElementById('aai-key').value.trim());
   }
 
-  // Engine Download & Cache Initialization
-  async function initRealFFmpegEngine() {
+  // Official toBlobURL Helper
+  async function toBlobURLWithProgress(url, mimeType, onProgress) {
+    const cache = await caches.open(CACHE_NAME);
+    const cached = await cache.match(url);
+    if (cached) {
+      const blob = await cached.blob();
+      if (onProgress) onProgress(100, (blob.size / 1048576).toFixed(1), (blob.size / 1048576).toFixed(1));
+      return URL.createObjectURL(blob);
+    }
+
+    const res = await fetch(url);
+    const total = parseInt(res.headers.get('content-length') || '31000000', 10);
+    const reader = res.body.getReader();
+    let received = 0;
+    const chunks = [];
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      received += value.length;
+      if (onProgress) {
+        const pct = Math.min(100, Math.round((received / total) * 100));
+        onProgress(pct, (received / 1048576).toFixed(1), (total / 1048576).toFixed(1));
+      }
+    }
+
+    const blob = new Blob(chunks, { type: mimeType });
+    await cache.put(url, new Response(blob));
+    return URL.createObjectURL(blob);
+  }
+
+  async function initCloudflareEngine() {
     const statusText = document.getElementById('engine-status-text');
     const progressBar = document.getElementById('engine-progress');
 
     try {
-      const cache = await caches.open(CACHE_NAME);
-      const wasmUrl = `${CORE_BASE_URL}/ffmpeg-core.wasm`;
-      const jsUrl = `${CORE_BASE_URL}/ffmpeg-core.js`;
-      const workerUrl = `${FFMPEG_LIB_URL}/814.ffmpeg.js`;
-
-      // 1. Core WASM ဖိုင် ဒေါင်းလုဒ်ဆွဲခြင်း (~31MB)
-      let wasmBlob = await getCachedOrFetch(cache, wasmUrl, (pct, loadedMB, totalMB) => {
+      const wasmURL = await toBlobURLWithProgress(`${CORE_BASE_URL}/ffmpeg-core.wasm`, 'application/wasm', (pct, curMB, totMB) => {
         progressBar.style.width = pct + '%';
-        statusText.innerText = `အင်ဂျင်ကို တပ်ဆင်နေပါသည်... (${loadedMB} MB / ~${totalMB} MB - ${pct}%)`;
+        statusText.innerText = `အင်ဂျင်ကို တပ်ဆင်နေပါသည်... (${curMB} MB / ~${totMB} MB - ${pct}%)`;
       });
 
-      // 2. Core JS နှင့် Worker Scripts များ ဒေါင်းလုဒ်ဆွဲခြင်း
-      let jsBlob = await getCachedOrFetch(cache, jsUrl, () => {});
-      let workerBlob = await getCachedOrFetch(cache, workerUrl, () => {});
+      const coreURL = await toBlobURLWithProgress(`${CORE_BASE_URL}/ffmpeg-core.js`, 'text/javascript');
 
       const { FFmpeg } = window.FFmpegWASM;
       ffmpegInstance = new FFmpeg();
@@ -225,50 +233,16 @@
         document.getElementById('render-status-text').innerText = `Processing with Engine... ${pct}%`;
       });
 
-      // 3. Worker URL အား Local Blob အဖြစ် ထည့်သွင်းခြင်း (CORS Error မတက်တော့ပါ)
-      await ffmpegInstance.load({
-        coreURL: URL.createObjectURL(jsBlob),
-        wasmURL: URL.createObjectURL(wasmBlob),
-        classWorkerURL: URL.createObjectURL(workerBlob)
-      });
+      // Load using safe Blob URLs
+      await ffmpegInstance.load({ coreURL, wasmURL });
 
       isEngineReady = true;
       progressBar.style.width = '100%';
       statusText.innerHTML = `<span style="color:#4ade80;">● AI Engine Loaded & Ready (Cache ထဲတွင် အသင့်ရှိပါသည်)</span>`;
     } catch (e) {
       console.error(e);
-      statusText.innerText = "Engine Load Error: " + e.message;
+      statusText.innerText = "Engine Load Error: " + (e.message || "WASM load failed");
     }
-  }
-
-  async function getCachedOrFetch(cache, url, onProgress) {
-    const cached = await cache.match(url);
-    if (cached) {
-      onProgress(100, "31.0", "31.0");
-      return cached.blob();
-    }
-
-    const response = await fetch(url);
-    const contentLength = response.headers.get('content-length') || 32000000;
-    const totalBytes = parseInt(contentLength, 10);
-    const reader = response.body.getReader();
-    let receivedBytes = 0;
-    let chunks = [];
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      chunks.push(value);
-      receivedBytes += value.length;
-      const pct = Math.min(100, Math.round((receivedBytes / totalBytes) * 100));
-      const loadedMB = (receivedBytes / (1024 * 1024)).toFixed(1);
-      const totalMB = (totalBytes / (1024 * 1024)).toFixed(1);
-      onProgress(pct, loadedMB, totalMB);
-    }
-
-    const blob = new Blob(chunks, { type: url.endsWith('.wasm') ? 'application/wasm' : 'text/javascript' });
-    await cache.put(url, new Response(blob));
-    return blob;
   }
 
   function loadSourceVideo(input) {
