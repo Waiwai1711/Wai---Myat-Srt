@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Waiwai AI Recap Studio</title>
+  <title>THET × DeepLearn AI Recap Studio</title>
 
   <!-- Stable FFmpeg 0.11.6 -->
   <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
@@ -68,20 +68,20 @@
 <div class="container">
   <div class="header">
     <div class="logo">⚡ THET × DeepLearn AI</div>
-    <div class="badge">Stable Version</div>
+    <div class="badge">Pro Version</div>
   </div>
 
   <div class="card" id="engine-card">
     <div class="card-title">⚙️ AI Engine Status</div>
     <div class="card-desc" id="engine-status-text">
-      ပထမဆုံးအကြိမ် စတင်သုံးစွဲသူဖြစ်တဲ့အတွက် အင်ဂျင်ကို တပ်ဆင်နေပါတယ်... (Downloading Engine)
+      အင်ဂျင်ကို တပ်ဆင်နေပါသည်... (~25MB)
     </div>
     <div class="progress-bar-bg"><div class="progress-bar" id="engine-progress"></div></div>
   </div>
 
   <div class="card">
     <div class="card-title">Step 1: Video တင်ပါ</div>
-    <div class="card-desc">Recap လုပ်မည့် video ကို ရွေးချယ်ပါ (အသံကို အရင်ဆွဲထုတ်ပါမည်)</div>
+    <div class="card-desc">Recap လုပ်မည့် video ကို ရွေးချယ်ပါ (Universal-3.5 Pro + Speaker Diarization)</div>
     <input type="text" id="aai-key" value="b433ae5d481842b8a5e34f2023fc01a5" placeholder="AssemblyAI API Key (Required)" onchange="saveKey()">
     <input type="file" id="video-file" accept="video/*" onchange="loadSourceVideo(this)">
     
@@ -91,7 +91,7 @@
 
   <div class="card">
     <div class="card-title">Step 2: မူရင်းစာသားကို စစ်ဆေးပါ (Source Text)</div>
-    <div class="card-desc">Time Frame ပါဝင်သော မူရင်း စကားပြောစာသားများ:</div>
+    <div class="card-desc">Speaker များနှင့် Time Frame ပါဝင်သော စာသားများ:</div>
     <textarea id="source-text" readonly placeholder="Waiting for transcription..."></textarea>
     
     <button class="btn btn-secondary" onclick="copyGeminiPrompt()">📋 Copy Full Prompt</button>
@@ -211,26 +211,17 @@
     }
   }
 
-  // ဒီနေရာက အသစ် - FFmpeg Engine သုံးပြီး MP3 ဖိုင်ဆိုဒ်အသေးစား (32k) ထုတ်ပေးမယ့် အပိုင်း
   async function extractAudioFast(videoFile) {
     if (!isEngineReady) throw new Error("အင်ဂျင် မတက်သေးပါ။");
-    
-    // Video ကို FFmpeg ရဲ့ Memory ထဲ ထည့်ခြင်း
     ffmpeg.FS('writeFile', 'input_temp.mp4', await fetchFile(videoFile));
-    
-    // MP3 အဖြစ် မြန်မြန် Convert လုပ်ခြင်း
     await ffmpeg.run('-i', 'input_temp.mp4', '-vn', '-ac', '1', '-ar', '16000', '-b:a', '32k', 'audio_temp.mp3');
-    
-    // ပြောင်းပြီးသား MP3 အသံဖိုင်ကို ဖတ်ယူခြင်း
     const data = ffmpeg.FS('readFile', 'audio_temp.mp3');
-    
-    // Memory ရှင်းထုတ်ခြင်း
     ffmpeg.FS('unlink', 'input_temp.mp4');
     ffmpeg.FS('unlink', 'audio_temp.mp3');
-    
     return new Blob([data.buffer], { type: 'audio/mp3' });
   }
 
+  // Step 1: AssemblyAI Transcribe (Universal-3.5 Pro + Speaker Diarization)
   async function startTranscribe() {
     const key = document.getElementById('aai-key').value.trim();
     if (!key || !uploadedVideoFile) return alert("API Key နှင့် Video ဖိုင် ထည့်သွင်းပေးပါ။");
@@ -240,7 +231,7 @@
       statusBox.value = "Engine ဖြင့် Audio ကို MP3 အဖြစ် အမြန်ခွဲထုတ်နေပါသည်...";
       const audioBlob = await extractAudioFast(uploadedVideoFile);
 
-      statusBox.value = `Audio (${(audioBlob.size/1024/1024).toFixed(2)}MB) အမြန်တင်ပို့နေပါသည်...`;
+      statusBox.value = `Audio (${(audioBlob.size/1024/1024).toFixed(2)}MB) တင်ပို့နေပါသည်...`;
       const uploadRes = await fetch("https://api.assemblyai.com/v2/upload", {
         method: "POST",
         headers: { "authorization": key },
@@ -248,11 +239,17 @@
       });
       const { upload_url } = await uploadRes.json();
 
-      statusBox.value = "AI Nano Model ဖြင့် စာသားအမြန်ပြောင်းနေပါသည်...";
+      statusBox.value = "Universal-3.5 Pro & Speaker Diarization ဖြင့် လုပ်ဆောင်နေပါသည်...";
+      
       const transcriptRes = await fetch("https://api.assemblyai.com/v2/transcript", {
         method: "POST",
         headers: { "authorization": key, "content-type": "application/json" },
-        body: JSON.stringify({ audio_url: upload_url, language_code: "zh", speech_model: "nano", punctuate: true })
+        body: JSON.stringify({ 
+          audio_url: upload_url, 
+          speech_model: "universal-3-5-pro", 
+          speaker_labels: true, 
+          punctuate: true 
+        })
       });
       const { id } = await transcriptRes.json();
       pollTranscript(id, key);
@@ -264,23 +261,35 @@
   async function pollTranscript(id, key) {
     const res = await fetch(`https://api.assemblyai.com/v2/transcript/${id}`, { headers: { "authorization": key } });
     const data = await res.json();
+    
     if (data.status === "completed") {
-      if (data.sentences && data.sentences.length > 0) {
+      if (data.utterances && data.utterances.length > 0) {
+        segments = data.utterances.map((u, idx) => ({
+          id: idx,
+          start: (u.start / 1000).toFixed(1),
+          end: (u.end / 1000).toFixed(1),
+          maxLimit: ((u.end - u.start) / 1000).toFixed(1),
+          speaker: u.speaker,
+          text: u.text
+        }));
+      } else if (data.sentences && data.sentences.length > 0) {
         segments = data.sentences.map((s, idx) => ({
           id: idx,
           start: (s.start / 1000).toFixed(1),
           end: (s.end / 1000).toFixed(1),
           maxLimit: ((s.end - s.start) / 1000).toFixed(1),
+          speaker: "A",
           text: s.text
         }));
       } else {
-        segments = [{ id: 0, start: "0.1", end: "4.5", maxLimit: "4.4", text: data.text || "No text detected." }];
+        segments = [{ id: 0, start: "0.1", end: "4.5", maxLimit: "4.4", speaker: "A", text: data.text || "No text detected." }];
       }
       
       document.getElementById('source-text').value = segments.map(s => 
-        `ID: ${s.id} | Time Frame: ${s.start}s to ${s.end}s (Max Limit: ${s.maxLimit}s)\nText: "${s.text}"`
+        `[Speaker ${s.speaker}] ID: ${s.id} | Time: ${s.start}s - ${s.end}s\nText: "${s.text}"`
       ).join("\n\n");
-      alert("စာသားပြောင်းလဲခြင်း ပြီးပါပြီ! Step 2 မှ Copy Full Prompt ကို နှိပ်ပါ။");
+      
+      alert("Speaker Diarization ဖြင့် စာသားခွဲခြားပြီးပါပြီ! Step 2 မှ Copy Full Prompt ကို နှိပ်ပါ။");
     } else if (data.status === "error") {
       alert("Transcription Failed: " + data.error);
     } else {
@@ -291,11 +300,11 @@
   function copyGeminiPrompt() {
     if (segments.length === 0) return alert("မူရင်းစာသား မရှိသေးပါ။");
     const inputsFormatted = segments.map(s => 
-      `ID: ${s.id} | Time Frame: ${s.start}s to ${s.end}s (Max Limit: ${s.maxLimit}s)\n"${s.text}"`
+      `[Speaker ${s.speaker}] ID: ${s.id} | Time Frame: ${s.start}s to ${s.end}s (Max Limit: ${s.maxLimit}s)\n"${s.text}"`
     ).join("\n\n");
 
-    const exactPrompt = `You are a professional video dubbing translator. You MUST translate the following source subtitles into natural spoken Burmese (Myanmar script ONLY, NO English, NO phonetic guides).
-CRITICAL TIME LIMIT CONSTRAINT: For each subtitle, I have provided the exact Time Frame (e.g. from Second A to Second B) and the Max Limit in seconds.
+    const exactPrompt = `You are a professional video dubbing translator. You MUST translate the following source subtitles into natural spoken Burmese (Myanmar script ONLY, NO English, NO phonetic guides). Note that each line has a [Speaker X] label indicating different speakers.
+CRITICAL TIME LIMIT CONSTRAINT: For each subtitle, I have provided the exact Time Frame and the Max Limit in seconds.
 If your Burmese translation takes longer to speak than this time, the TTS audio will OVERLAP and ruin the video.
 You MUST provide a translation that fits perfectly within this time frame. If the time limit is very short (e.g., under 2 seconds), you MUST aggressively compress and summarize the Burmese translation (ချုံ့ပေးပါ) so it can be spoken very fast. Discard polite particles and unnecessary words. Do not translate word-for-word.
 
