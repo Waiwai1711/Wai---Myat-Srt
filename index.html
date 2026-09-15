@@ -5,7 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>THET × DeepLearn AI Recap Studio</title>
 
-  <!-- Official FFmpeg 0.12 + Util Scripts -->
+  <!-- ၁။ Cross-Origin Isolation အတွက် Service Worker (workers.dev ပေါ်တွင် SharedArrayBuffer ရရှိစေရန်) -->
+  <script src="https://cdn.jsdelivr.net/npm/coi-serviceworker/coi-serviceworker.min.js"></script>
+
+  <!-- ၂။ FFmpeg 0.12 Official Scripts -->
   <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js"></script>
   <script src="https://unpkg.com/@ffmpeg/util@0.12.1/dist/umd/index.js"></script>
 
@@ -169,6 +172,7 @@
 
   const CACHE_NAME = 'deeplearn-ffmpeg-core-v1';
   const CORE_BASE_URL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
+  const FFMPEG_LIB_URL = 'https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd';
 
   window.onload = async () => {
     const savedKey = localStorage.getItem('aai_key');
@@ -180,7 +184,7 @@
     localStorage.setItem('aai_key', document.getElementById('aai-key').value.trim());
   }
 
-  // Official toBlobURL Helper
+  // Blob URL ပြောင်းပေးမည့် အထူး Helper (Cache ပါဝင်)
   async function toBlobURLWithProgress(url, mimeType, onProgress) {
     const cache = await caches.open(CACHE_NAME);
     const cached = await cache.match(url);
@@ -217,12 +221,17 @@
     const progressBar = document.getElementById('engine-progress');
 
     try {
+      // ၁။ WASM Engine ဖိုင် (~31MB) ကို ဒေါင်းလုဒ်ဆွဲခြင်း
       const wasmURL = await toBlobURLWithProgress(`${CORE_BASE_URL}/ffmpeg-core.wasm`, 'application/wasm', (pct, curMB, totMB) => {
         progressBar.style.width = pct + '%';
         statusText.innerText = `အင်ဂျင်ကို တပ်ဆင်နေပါသည်... (${curMB} MB / ~${totMB} MB - ${pct}%)`;
       });
 
+      // ၂။ Core JS ဖိုင်ကို ဒေါင်းလုဒ်ဆွဲခြင်း
       const coreURL = await toBlobURLWithProgress(`${CORE_BASE_URL}/ffmpeg-core.js`, 'text/javascript');
+
+      // ၃။ အဓိက အရေးကြီးဆုံး: 814.ffmpeg.js Worker ဖိုင်ကိုပါ Local Blob အဖြစ် ပြောင်းလဲယူခြင်း
+      const classWorkerURL = await toBlobURLWithProgress(`${FFMPEG_LIB_URL}/814.ffmpeg.js`, 'text/javascript');
 
       const { FFmpeg } = window.FFmpegWASM;
       ffmpegInstance = new FFmpeg();
@@ -233,12 +242,16 @@
         document.getElementById('render-status-text').innerText = `Processing with Engine... ${pct}%`;
       });
 
-      // Load using safe Blob URLs
-      await ffmpegInstance.load({ coreURL, wasmURL });
+      // classWorkerURL ပါ တစ်ခါတည်း ထည့်သွင်း load လုပ်ခြင်း (Worker CORS Error လုံးဝ မတက်တော့ပါ)
+      await ffmpegInstance.load({
+        coreURL,
+        wasmURL,
+        classWorkerURL
+      });
 
       isEngineReady = true;
       progressBar.style.width = '100%';
-      statusText.innerHTML = `<span style="color:#4ade80;">● AI Engine Loaded & Ready (Cache ထဲတွင် အသင့်ရှိပါသည်)</span>`;
+      statusText.innerHTML = `<span style="color:#4ade80;">● AI Engine Loaded & Ready (အင်ဂျင် အဆင်သင့်ဖြစ်ပါပြီ)</span>`;
     } catch (e) {
       console.error(e);
       statusText.innerText = "Engine Load Error: " + (e.message || "WASM load failed");
@@ -254,7 +267,6 @@
     }
   }
 
-  // Audio Extractor (Video -> Audio WAV)
   async function extractAudioFast(videoFile) {
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     const arrayBuffer = await videoFile.arrayBuffer();
@@ -293,7 +305,6 @@
     return new Blob([view], { type: 'audio/wav' });
   }
 
-  // Step 1: AssemblyAI Transcribe
   async function startTranscribe() {
     const key = document.getElementById('aai-key').value.trim();
     if (!key || !uploadedVideoFile) return alert("API Key နှင့် Video ဖိုင် ထည့်သွင်းပေးပါ။");
@@ -351,7 +362,6 @@
     }
   }
 
-  // Step 2: Gemini Prompt Copy
   function copyGeminiPrompt() {
     if (segments.length === 0) return alert("မူရင်းစာသား မရှိသေးပါ။");
     const inputsFormatted = segments.map(s => 
@@ -399,7 +409,6 @@ ${inputsFormatted}`;
     selectedVoice = voice;
   }
 
-  // Step 3: Edge-TTS မြန်မာအသံ ထုတ်ယူခြင်း
   function fetchEdgeTTS(text, voice) {
     return new Promise((resolve, reject) => {
       const socket = new WebSocket("wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken=6A5AA1D4EA6542D2A414765D96B21CC0");
@@ -461,7 +470,6 @@ ${inputsFormatted}`;
     }
   }
 
-  // Step 4: FFmpeg Render
   async function startFFmpegRender() {
     if (!isEngineReady) return alert("Engine မတက်သေးပါ၊ အင်ဂျင်တပ်ဆင်ပြီးဆုံးသည်အထိ စောင့်ပါခင်ဗျာ။");
     if (!uploadedVideoFile) return alert("Video ဖိုင် အရင်ရွေးချယ်ပေးပါ။");
