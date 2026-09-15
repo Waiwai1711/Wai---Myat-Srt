@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AI Recap Studio</title>
+  <title>THET × DeepLearn AI Recap Studio</title>
   <style>
     :root {
       --bg: #0b0f19;
@@ -16,37 +16,39 @@
     }
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
     body { background-color: var(--bg); color: var(--text-main); display: flex; justify-content: center; padding: 20px 10px; }
-    .container { width: 100%; max-width: 460px; display: flex; flex-direction: column; gap: 16px; }
+    .container { width: 100%; max-width: 480px; display: flex; flex-direction: column; gap: 16px; }
 
-    /* Header */
-    .header { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; }
+    .header { display: flex; justify-content: space-between; align-items: center; }
     .logo { font-weight: 800; font-size: 1.2rem; color: #a78bfa; }
     .badge { background: #1e1b4b; color: #c4b5fd; font-size: 0.75rem; padding: 4px 10px; border-radius: 20px; border: 1px solid #4338ca; }
 
-    /* Cards */
     .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 16px; padding: 18px; display: flex; flex-direction: column; gap: 12px; }
     .card-title { font-size: 1rem; font-weight: 700; color: #fff; }
     .card-desc { font-size: 0.8rem; color: var(--text-sub); line-height: 1.4; }
 
-    /* Inputs & Buttons */
     input[type="text"], textarea {
       width: 100%; background: #0b0f19; border: 1px solid var(--border);
       color: #fff; padding: 10px 12px; border-radius: 10px; font-size: 0.85rem; outline: none;
     }
-    textarea { height: 90px; resize: none; }
+    textarea { height: 110px; resize: vertical; }
+    
     .btn {
       background: var(--primary); color: #fff; border: none; padding: 12px;
       border-radius: 10px; font-weight: 600; font-size: 0.9rem; cursor: pointer; text-align: center;
+      transition: background 0.2s;
     }
     .btn:active { background: var(--primary-hover); }
     .btn-secondary { background: #1e293b; border: 1px solid var(--border); color: #cbd5e1; }
+    .btn-orange { background: #ea580c; }
+    .btn-orange:hover { background: #c2410c; }
+    .btn-green { background: #16a34a; }
+    .btn-green:hover { background: #15803d; }
 
-    /* Engine Loader */
-    #engine-card { border-color: #4338ca; background: #0f172a; }
+    video { width: 100%; border-radius: 10px; background: #000; max-height: 280px; object-fit: contain; }
+
     .progress-bar-bg { width: 100%; height: 8px; background: #1e293b; border-radius: 4px; overflow: hidden; margin-top: 6px; }
-    .progress-bar { width: 0%; height: 100%; background: var(--primary); transition: width 0.3s; }
+    .progress-bar { width: 0%; height: 100%; background: #f97316; transition: width 0.1s linear; }
 
-    /* Voice Grid */
     .voice-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     .voice-btn {
       background: #0b0f19; border: 1px solid var(--border); border-radius: 12px;
@@ -60,48 +62,44 @@
 <body>
 
 <div class="container">
-  <!-- Top Header -->
   <div class="header">
-    <div class="logo">⚡ AI Recap Studio</div>
-    <div class="badge">Local WebApp</div>
+    <div class="logo">⚡ THET × DeepLearn AI</div>
+    <div class="badge">Recap Studio</div>
   </div>
 
-  <!-- Engine Initialization Card -->
-  <div class="card" id="engine-card">
-    <div class="card-title">⚙️ Local Video Engine</div>
-    <div class="card-desc" id="engine-status">အင်ဂျင်ကို စစ်ဆေးနေပါသည်...</div>
-    <div class="progress-bar-bg"><div class="progress-bar" id="engine-progress"></div></div>
-  </div>
-
-  <!-- Step 1: Upload & API -->
+  <!-- Step 1: Video Upload & Preview -->
   <div class="card">
-    <div class="card-title">Step 1: Video တင်ပါ & Key ထည့်ပါ</div>
+    <div class="card-title">Step 1: Video တင်ပါ</div>
+    <div class="card-desc">Recap လုပ်မည့် video ကို ရွေးချယ်ပါ (အသံကို အရင်ဆွဲထုတ်ပါမည်)</div>
     <input type="text" id="aai-key" placeholder="AssemblyAI API Key (Required)" onchange="saveKey()">
-    <input type="file" id="video-file" accept="video/mp4,video/*">
-    <button class="btn" onclick="startTranscribe()">အသံထုတ်ယူပြီး စာသားပြောင်းမည် ▶</button>
+    <input type="file" id="video-file" accept="video/*" onchange="loadSourceVideo(this)">
+    
+    <!-- Upload တင်ထားသော Video ကြည့်ရန် Preview Player -->
+    <video id="source-video-preview" controls playsinline style="display:none;"></video>
+    <button class="btn" id="transcribe-btn" onclick="startTranscribe()">Step 1: အသံထုတ်မည် ▶</button>
   </div>
 
-  <!-- Step 2: Gemini Manual Translation -->
+  <!-- Step 2: Source Text & Gemini Prompt -->
   <div class="card">
-    <div class="card-title">Step 2: မူရင်းစာသား & ဘာသာပြန်</div>
-    <div class="card-desc">AssemblyAI ကရသော တရုတ်စာသား (Time Frame ပါဝင်သည်)</div>
+    <div class="card-title">Step 2: မူရင်းစာသားကို စစ်ဆေးပါ (Source Text)</div>
+    <div class="card-desc">Time Frame ပါဝင်သော မူရင်း စကားပြောစာသားများ:</div>
     <textarea id="source-text" readonly placeholder="Waiting for transcription..."></textarea>
     
-    <button class="btn btn-secondary" onclick="copyGeminiPrompt()">📋 Copy Full Gemini Prompt</button>
-    <div class="card-desc" style="margin-top: 5px;">Gemini App မှ ရလာသော JSON response ကို အောက်တွင် ထည့်ပါ:</div>
-    <textarea id="gemini-json-input" placeholder='{"translations": ["မနက်ဖြန် မင်းတို့ဆိုင်မှာ...", ...]}'></textarea>
+    <!-- Gemini အတွက် သင်တောင်းဆိုထားသော Prompt ကို အတိအကျ ကူးပေးမည့် ခလုတ် -->
+    <button class="btn btn-secondary" onclick="copyGeminiPrompt()">📋 Copy Full Prompt</button>
+    
+    <div class="card-desc" style="margin-top: 6px;">Gemini မှ ရလာသော JSON response ကို အောက်တွင် ထည့်ပါ:</div>
+    <textarea id="gemini-json-input" placeholder='Paste the JSON response from Gemini here...'></textarea>
     <button class="btn" onclick="applyTranslation()">Submit Translation ▶</button>
   </div>
 
   <!-- Step 3: Burmese Script Review -->
   <div class="card">
-    <div class="card-title">Step 3: မြန်မာဘာသာပြန် စစ်ဆေးပါ</div>
-    <textarea id="burmese-review" placeholder="ဘာသာပြန် စာသားများ ဤနေရာတွင် ပေါ်လာပါမည်..."></textarea>
-  </div>
-
-  <!-- Step 4: Voice & Render -->
-  <div class="card">
-    <div class="card-title">Step 4: အသံရွေးချယ်ပြီး Video ဖန်တီးမည်</div>
+    <div class="card-title">Step 3: မြန်မာဘာသာပြန်ကို စစ်ဆေးပါ</div>
+    <div class="card-desc">အောက်ပါ မြန်မာစာကြောင်းများကို လိုအပ်ပါက ပြင်ဆင်နိုင်ပါသည်:</div>
+    <textarea id="burmese-review" placeholder="Waiting for translation..."></textarea>
+    
+    <div class="card-title" style="margin-top:8px;">အသံရွေးချယ်ပါ (Select Voice)</div>
     <div class="voice-grid">
       <div class="voice-btn active" onclick="selectVoice(this, 'Thiha')">
         <div class="avatar">BB</div>
@@ -112,125 +110,210 @@
         <div><div>နှင်းဆီ</div><small style="color:var(--text-sub)">Female</small></div>
       </div>
     </div>
+  </div>
+
+  <!-- Step 4: Real Rendering & Direct Download -->
+  <div class="card">
+    <div class="card-title">Step 4: ရလဒ်များ (Results)</div>
+    <div class="card-desc">Video ရဲ့ segment တစ်ခုချင်းကို Subtitle များနှင့်အတူ စက် CPU သုံးပြီး တကယ့် Video အဖြစ် Render ပြုလုပ်ပါမည်။</div>
     
-    <button class="btn" style="background:#f97316; margin-top:8px;" onclick="renderRecapVideo()">
+    <button class="btn btn-orange" id="render-btn" onclick="startRealRender()">
       🎬 AI Recap Video ဖန်တီးမည်
     </button>
-    <div id="render-status" class="card-desc" style="text-align:center;"></div>
+
+    <!-- Render လုပ်နေစဉ် ပြသမည့် Progress Bar -->
+    <div id="render-box" style="display:none; margin-top:8px;">
+      <div class="card-desc" id="render-status-text">Rendering... 0%</div>
+      <div class="progress-bar-bg"><div class="progress-bar" id="render-progress"></div></div>
+    </div>
+
+    <!-- Render ပြီးသွားပါက ပေါ်လာမည့် Video Player နှင့် Download ခလုတ် -->
+    <div id="ready-box" style="display:none; flex-direction:column; gap:10px; margin-top:10px;">
+      <div class="card-title" style="color:#4ade80;">✅ AI RECAP VIDEO READY!</div>
+      <video id="final-video-preview" controls playsinline></video>
+      <button class="btn btn-green" id="download-video-btn">📥 Download AI Recap Video (.mp4)</button>
+      <button class="btn btn-secondary" onclick="downloadSRT()">📥 Download Subtitle (.srt)</button>
+    </div>
   </div>
 </div>
 
-<script>
-  let transcriptionData = [];
-  let translatedSentences = [];
-  let selectedVoiceType = "Thiha";
+<!-- Video Frame များကို ရေးဆွဲမည့် Hidden Canvas -->
+<canvas id="render-canvas" style="display:none;"></canvas>
 
-  // API Key LocalStorage တွင် သိမ်းဆည်းခြင်း
+<script>
+  let segments = [];
+  let translatedLines = [];
+  let selectedVoice = "Thiha";
+  let audioContextInstance = null;
+  let audioSourceNode = null;
+  let audioDestNode = null;
+
   window.onload = () => {
     const savedKey = localStorage.getItem('aai_key');
     if (savedKey) document.getElementById('aai-key').value = savedKey;
-    simulateEngineLoad();
   };
 
   function saveKey() {
-    const key = document.getElementById('aai-key').value.trim();
-    localStorage.setItem('aai_key', key);
+    localStorage.setItem('aai_key', document.getElementById('aai-key').value.trim());
   }
 
-  // Engine Download Simulation (ffmpeg.wasm caching)
-  function simulateEngineLoad() {
-    const p = document.getElementById('engine-progress');
-    const s = document.getElementById('engine-status');
-    let w = 0;
-    const interval = setInterval(() => {
-      w += 20;
-      p.style.width = w + '%';
-      s.innerText = `တပ်ဆင်နေပါသည်... (${w}%)`;
-      if (w >= 100) {
-        clearInterval(interval);
-        s.innerText = "အင်ဂျင် အဆင်သင့်ဖြစ်ပါပြီ (Local Ready)";
-      }
-    }, 200);
+  // Video ရွေးချယ်ပြီးသည်နှင့် Player တွင် တန်းပြခြင်း
+  function loadSourceVideo(input) {
+    const file = input.files[0];
+    if (file) {
+      const sourceVideo = document.getElementById('source-video-preview');
+      sourceVideo.src = URL.createObjectURL(file);
+      sourceVideo.style.display = "block";
+    }
   }
 
-  // Step 1: AssemblyAI API ဖြင့် Transcription ဆွဲယူခြင်း
+  // Audio Extractor (Video မှ Audio သီးသန့် အမြန်ခွဲထုတ်ခြင်း)
+  async function extractAudioFast(videoFile) {
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const arrayBuffer = await videoFile.arrayBuffer();
+    const decoded = await audioCtx.decodeAudioData(arrayBuffer);
+    const offlineCtx = new OfflineAudioContext(1, decoded.duration * 16000, 16000);
+    const source = offlineCtx.createBufferSource();
+    source.buffer = decoded;
+    source.connect(offlineCtx.destination);
+    source.start(0);
+    const rendered = await offlineCtx.startRendering();
+    return audioBufferToWav(rendered);
+  }
+
+  function audioBufferToWav(buffer) {
+    const numChannels = 1, sampleRate = buffer.sampleRate, format = 1, bitDepth = 16;
+    const bytesPerSample = bitDepth / 8, blockAlign = numChannels * bytesPerSample;
+    const data = buffer.getChannelData(0), dataLength = data.length * bytesPerSample;
+    const arrayBuffer = new ArrayBuffer(44 + dataLength);
+    const view = new DataView(arrayBuffer);
+    function writeString(v, o, s) { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); }
+
+    writeString(view, 0, 'RIFF');
+    view.setUint32(4, 36 + dataLength, true);
+    writeString(view, 8, 'WAVE');
+    writeString(view, 12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, format, true);
+    view.setUint16(22, numChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * blockAlign, true);
+    view.setUint16(32, blockAlign, true);
+    view.setUint16(34, bitDepth, true);
+    writeString(view, 36, 'data');
+    view.setUint32(40, dataLength, true);
+
+    let offset = 44;
+    for (let i = 0; i < data.length; i++, offset += 2) {
+      let s = Math.max(-1, Math.min(1, data[i]));
+      view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+    }
+    return new Blob([view], { type: 'audio/wav' });
+  }
+
+  // Step 1: AssemblyAI ဖြင့် Transcription ပြုလုပ်ခြင်း
   async function startTranscribe() {
     const key = document.getElementById('aai-key').value.trim();
     const file = document.getElementById('video-file').files[0];
     if (!key || !file) return alert("API Key နှင့် Video ဖိုင် ထည့်သွင်းပေးပါ။");
 
-    const statusDesc = document.getElementById('source-text');
-    statusDesc.value = "Audio တင်ပို့ပြီး transcribe လုပ်နေပါသည်... စက္ကန့်အနည်းငယ် စောင့်ပါ။";
-
+    const statusBox = document.getElementById('source-text');
     try {
-      // 1. Upload file to AssemblyAI
+      statusBox.value = "Video ထဲမှ Audio ကို ဆွဲထုတ်နေပါသည်...";
+      const audioBlob = await extractAudioFast(file);
+
+      statusBox.value = `Audio ဖိုင် (${(audioBlob.size/1024/1024).toFixed(1)}MB) ကို တင်ပို့နေပါသည်...`;
       const uploadRes = await fetch("https://api.assemblyai.com/v2/upload", {
         method: "POST",
         headers: { "authorization": key },
-        body: file
+        body: audioBlob
       });
       const { upload_url } = await uploadRes.json();
 
-      // 2. Request Transcription (language_code: zh / auto)
+      statusBox.value = "AI Nano Model ဖြင့် စာသားပြောင်းနေပါသည် (ခဏစောင့်ပါ)...";
       const transcriptRes = await fetch("https://api.assemblyai.com/v2/transcript", {
         method: "POST",
         headers: { "authorization": key, "content-type": "application/json" },
-        body: JSON.stringify({ audio_url: upload_url, language_detection: true })
+        body: JSON.stringify({
+          audio_url: upload_url,
+          language_code: "zh",
+          speech_model: "nano",
+          punctuate: true
+        })
       });
       const { id } = await transcriptRes.json();
-
-      // 3. Polling result
-      checkTranscript(id, key);
-    } catch (e) {
-      statusDesc.value = "Error: " + e.message;
+      pollTranscript(id, key);
+    } catch (err) {
+      statusBox.value = "Error: " + err.message;
     }
   }
 
-  async function checkTranscript(id, key) {
+  async function pollTranscript(id, key) {
     const res = await fetch(`https://api.assemblyai.com/v2/transcript/${id}`, {
       headers: { "authorization": key }
     });
     const data = await res.json();
     if (data.status === "completed") {
-      transcriptionData = (data.words && data.words.length > 0) ? data.words : [{ text: data.text, start: 0, end: 5000 }];
-      document.getElementById('source-text').value = data.text;
+      if (data.sentences && data.sentences.length > 0) {
+        segments = data.sentences.map((s, idx) => ({
+          id: idx,
+          start: (s.start / 1000).toFixed(1),
+          end: (s.end / 1000).toFixed(1),
+          maxLimit: ((s.end - s.start) / 1000).toFixed(1),
+          text: s.text
+        }));
+      } else {
+        segments = [{ id: 0, start: "0.1", end: "4.5", maxLimit: "4.4", text: data.text || "No text detected." }];
+      }
+      
+      document.getElementById('source-text').value = segments.map(s => 
+        `ID: ${s.id} | Time Frame: ${s.start}s to ${s.end}s (Max Limit: ${s.maxLimit}s)\nText: "${s.text}"`
+      ).join("\n\n");
+      alert("စာသားပြောင်းလဲခြင်း ပြီးပါပြီ! Step 2 မှ 'Copy Full Prompt' ကို နှိပ်နိုင်ပါပြီ။");
     } else if (data.status === "error") {
       alert("Transcription Failed: " + data.error);
     } else {
-      setTimeout(() => checkTranscript(id, key), 3000);
+      setTimeout(() => pollTranscript(id, key), 2000);
     }
   }
 
-  // Step 2: Time-constrained Prompt တည်ဆောက်ခြင်း
+  // Step 2: သင်တောင်းဆိုထားသော Prompt စာသားအပြည့်အစုံကို ကော်ပီကူးယူပေးခြင်း
   function copyGeminiPrompt() {
-    const text = document.getElementById('source-text').value;
-    if (!text) return alert("မူရင်းစာသား မရှိသေးပါ။");
+    if (segments.length === 0) return alert("မူရင်းစာသား မရှိသေးပါ။");
 
-    const prompt = `You are a professional video dubbing translator. You MUST translate the following source subtitles into natural spoken Burmese (Myanmar script ONLY, NO English).
-CRITICAL TIME LIMIT CONSTRAINT:
-For each sentence, aggressively compress and summarize the Burmese translation (ချုံ့ပေးပါ) so it can be spoken quickly. Discard unnecessary words.
+    const inputsFormatted = segments.map(s => 
+      `ID: ${s.id} | Time Frame: ${s.start}s to ${s.end}s (Max Limit: ${s.maxLimit}s)\n"${s.text}"`
+    ).join("\n\n");
 
-Return STRICTLY as a JSON object:
+    const exactPrompt = `You are a professional video dubbing translator. You MUST translate the following source subtitles into natural spoken Burmese (Myanmar script ONLY, NO English, NO phonetic guides).
+CRITICAL TIME LIMIT CONSTRAINT: For each subtitle, I have provided the exact Time Frame (e.g. from Second A to Second B) and the Max Limit in seconds.
+If your Burmese translation takes longer to speak than this time, the TTS audio will OVERLAP and ruin the video.
+You MUST provide a translation that fits perfectly within this time frame. If the time limit is very short (e.g., under 2 seconds), you MUST aggressively compress and summarize the Burmese translation (ချုံ့ပေးပါ) so it can be spoken very fast. Discard polite particles and unnecessary words. Do not translate word-for-word.
+
+SUBTITLE SPLITTING RULE: After each natural sentence or phrase, add the Burmese period (။) to mark the boundary. This splits long subtitles into short readable lines. Example: "ပထမကြောင်း။ ဒုတိယကြောင်း။" — one ။ per phrase. Short segments (under 2s) may have just one phrase ending with ။.
+
+Return the result STRICTLY as a JSON object with a single key "translations" which contains an array of strings, where each string is the translated Burmese text corresponding to the input ID in order.
+Example:
 {
   "translations": [
-    "မြန်မာဘာသာပြန် ၁",
-    "မြန်မာဘာသာပြန် ၂"
+    "မြန်မာစာသား ၁",
+    "မြန်မာစာသား ၂"
   ]
 }
 
-Input Text:
-${text}`;
+Inputs:
+${inputsFormatted}`;
 
-    navigator.clipboard.writeText(prompt);
-    alert("Gemini Prompt ကို ကော်ပီကူးယူပြီးပါပြီ! Gemini App တွင် Paste လုပ်ပြီး ရလာသော JSON ကို အောက်တွင် ထည့်ပါ။");
+    navigator.clipboard.writeText(exactPrompt);
+    alert("Gemini Prompt ကို ကော်ပီကူးယူပြီးပါပြီ! Gemini App ထဲသို့ Paste လုပ်ပြီး မေးမြန်းနိုင်ပါပြီ။");
   }
 
   function applyTranslation() {
     try {
       const raw = document.getElementById('gemini-json-input').value;
       const parsed = JSON.parse(raw);
-      translatedSentences = parsed.translations;
-      document.getElementById('burmese-review').value = translatedSentences.join("\n\n");
+      translatedLines = parsed.translations;
+      document.getElementById('burmese-review').value = translatedLines.join("\n\n");
       alert("ဘာသာပြန် ထည့်သွင်းပြီးပါပြီ!");
     } catch (e) {
       alert("JSON format မှားယွင်းနေပါသည်။ သေချာစစ်ဆေးပေးပါ။");
@@ -240,20 +323,149 @@ ${text}`;
   function selectVoice(el, voice) {
     document.querySelectorAll('.voice-btn').forEach(b => b.classList.remove('active'));
     el.classList.add('active');
-    selectedVoiceType = voice;
+    selectedVoice = voice;
   }
 
-  // Step 4: Render Action
-  function renderRecapVideo() {
-    if (translatedSentences.length === 0) return alert("ဘာသာပြန်စာသား အရင်ထည့်သွင်းပေးပါ။");
-    const status = document.getElementById('render-status');
-    status.innerText = "Video segment များကို အချိန်ကိုက် ချိန်ညှိနေပါသည် (Processing...)";
+  // Step 4: တကယ့် Video Render ပြုလုပ်ပြီး ဒေါင်းလုဒ်ဆွဲနိုင်စေမည့် စနစ်
+  async function startRealRender() {
+    if (translatedLines.length === 0) return alert("Step 3 တွင် ဘာသာပြန်စာသား အရင်ထည့်သွင်းပေးပါ။");
     
-    // WebApp Simulation
-    setTimeout(() => {
-      status.innerHTML = `<span style="color:#4ade80">✅ Render ပြီးဆုံးပါပြီ!</span><br>
-      <button class="btn" style="margin-top:5px;" onclick="alert('Download စတင်ပါပြီ')">📥 Download Video (.mp4)</button>`;
-    }, 2000);
+    const sourceVideo = document.getElementById('source-video-preview');
+    if (!sourceVideo.src) return alert("Video ဖိုင် မရှိသေးပါ။");
+
+    const renderBox = document.getElementById('render-box');
+    const statusText = document.getElementById('render-status-text');
+    const progressBar = document.getElementById('render-progress');
+    const readyBox = document.getElementById('ready-box');
+    
+    renderBox.style.display = "block";
+    readyBox.style.display = "none";
+
+    const canvas = document.getElementById('render-canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = sourceVideo.videoWidth || 720;
+    canvas.height = sourceVideo.videoHeight || 1280;
+
+    // AudioContext ဖြင့် Video အသံလမ်းကြောင်းကို ဖမ်းယူခြင်း
+    if (!audioContextInstance) {
+      audioContextInstance = new (window.AudioContext || window.webkitAudioContext)();
+      audioSourceNode = audioContextInstance.createMediaElementSource(sourceVideo);
+      audioDestNode = audioContextInstance.createMediaStreamDestination();
+      audioSourceNode.connect(audioDestNode);
+      audioSourceNode.connect(audioContextInstance.destination);
+    }
+    await audioContextInstance.resume();
+
+    // Canvas Video + Audio Stream ပေါင်းစပ်ခြင်း
+    const canvasStream = canvas.captureStream(30);
+    const audioTrack = audioDestNode.stream.getAudioTracks()[0];
+    const combinedTracks = [...canvasStream.getVideoTracks()];
+    if (audioTrack) combinedTracks.push(audioTrack);
+    const combinedStream = new MediaStream(combinedTracks);
+
+    // Browser ပေါ်မူတည်၍ Codec ရွေးချယ်ခြင်း
+    let mimeType = 'video/webm';
+    let fileExt = 'mp4';
+    if (MediaRecorder.isTypeSupported('video/mp4;codecs=avc1')) {
+      mimeType = 'video/mp4;codecs=avc1';
+    } else if (MediaRecorder.isTypeSupported('video/mp4')) {
+      mimeType = 'video/mp4';
+    } else if (MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')) {
+      mimeType = 'video/webm;codecs=vp8,opus';
+    }
+
+    const recorder = new MediaRecorder(combinedStream, { mimeType });
+    const chunks = [];
+
+    recorder.ondataavailable = e => {
+      if (e.data && e.data.size > 0) chunks.push(e.data);
+    };
+
+    recorder.onstop = () => {
+      const blob = new Blob(chunks, { type: 'video/mp4' });
+      const videoUrl = URL.createObjectURL(blob);
+      
+      const finalPlayer = document.getElementById('final-video-preview');
+      finalPlayer.src = videoUrl;
+      
+      // Download Button အလုပ်လုပ်စေရန် ချိတ်ဆက်ခြင်း
+      const downloadBtn = document.getElementById('download-video-btn');
+      downloadBtn.onclick = () => {
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = videoUrl;
+        a.download = `AI_Recap_Video.${fileExt}`;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => document.body.removeChild(a), 200);
+      };
+
+      renderBox.style.display = "none";
+      readyBox.style.display = "flex";
+    };
+
+    // Video ကို အစမှ ပြန်ဖွင့်ပြီး Frame တိုင်းကို Render စတင်ခြင်း
+    sourceVideo.currentTime = 0;
+    await sourceVideo.play();
+    recorder.start();
+
+    function renderLoop() {
+      if (sourceVideo.paused || sourceVideo.ended) {
+        if (recorder.state === "recording") recorder.stop();
+        return;
+      }
+
+      // Video Frame ကို Canvas ပေါ်ဆွဲခြင်း
+      ctx.drawImage(sourceVideo, 0, 0, canvas.width, canvas.height);
+
+      // လက်ရှိအချိန်နှင့် ကိုက်ညီသော စာတန်းထိုးကို ဆွဲသားခြင်း
+      const curTime = sourceVideo.currentTime;
+      let curSub = "";
+      for (let i = 0; i < segments.length; i++) {
+        if (curTime >= parseFloat(segments[i].start) && curTime <= parseFloat(segments[i].end)) {
+          curSub = translatedLines[i] || "";
+          break;
+        }
+      }
+
+      if (curSub) {
+        const fontSize = Math.max(20, Math.round(canvas.height * 0.035));
+        ctx.font = `bold ${fontSize}px system-ui, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.lineWidth = 6;
+        ctx.strokeStyle = '#000000';
+        ctx.strokeText(curSub, canvas.width / 2, canvas.height * 0.88);
+        ctx.fillStyle = '#fde047';
+        ctx.fillText(curSub, canvas.width / 2, canvas.height * 0.88);
+      }
+
+      // Progress bar update
+      const percent = Math.min(100, Math.round((sourceVideo.currentTime / sourceVideo.duration) * 100));
+      progressBar.style.width = percent + '%';
+      statusText.innerText = `Rendering... ${percent}%`;
+
+      requestAnimationFrame(renderLoop);
+    }
+
+    renderLoop();
+  }
+
+  // Subtitle (.srt) ဖိုင် Download လုပ်ခြင်း
+  function downloadSRT() {
+    let srt = "";
+    segments.forEach((s, idx) => {
+      const format = sec => {
+        const d = new Date(sec * 1000);
+        return d.toISOString().substr(11, 12).replace('.', ',');
+      };
+      srt += `${idx + 1}\n${format(s.start)} --> ${format(s.end)}\n${translatedLines[idx] || ""}\n\n`;
+    });
+
+    const blob = new Blob([srt], { type: 'text/plain;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'subtitles.srt';
+    a.click();
   }
 </script>
 </body>
